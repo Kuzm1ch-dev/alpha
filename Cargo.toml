@@ -1,0 +1,14 @@
+[package]
+name = "alpha"
+version = "0.1.0"
+authors = ["Kuzm1ch88-dev"]
+edition = "2021"
+rust-version = "1.80"
+
+[dependencies]
+rand = "*"
+[profile.dev]
+debug = true
+
+[profile.release]
+debug = true
