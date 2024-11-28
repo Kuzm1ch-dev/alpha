@@ -89,20 +89,6 @@ impl Interpreter {
             Expr::Variable(name) => {
                 self.environment.get(&name.lexeme)
             }
-            Expr::Get(object, name) => {
-                let object = self.evaluate(object)?;
-                if let Value::Instance(instance, values) = object {
-                    println!("instance {:?}", instance);
-                    println!("values {:?}", values);
-                    if let Some(value) = values.get(&name.lexeme) {
-                        Ok(value.clone())
-                    } else {
-                        Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::UnknownError(self.line)))
-                    }
-                } else {
-                    Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::UnknownError(self.line)))
-                }
-            }
             Expr::Assign(name, value) => {
                 let value = self.evaluate(value)?;
                 self.environment.assign(&name.lexeme, value.clone())?;
@@ -134,15 +120,6 @@ impl Interpreter {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
                 self.execute_call(callee, evaluated_args)
-            }
-            Expr::ClassCall(instance,callee, arguments) => {
-                let instance = self.evaluate(instance)?;
-                let callee = self.evaluate(callee)?;
-                let mut evaluated_args = Vec::new();
-                for arg in arguments {
-                    evaluated_args.push(self.evaluate(arg)?);
-                }
-                self.execute_class_call(instance, callee, evaluated_args)
             }
             Expr::Grouping(expr) => self.evaluate(expr),
             Expr::Nil => Ok(Value::Nil),
@@ -265,6 +242,7 @@ impl Interpreter {
     }
 
     fn execute_call(&mut self, callee: Value, arguments: Vec<Value>) -> InterpreterResult<Value> {
+        println!("callee {:?}", callee);
         match callee {
             Value::Function(name, params, body, closure_env) => {
                 if arguments.len() != params.len() {
@@ -292,14 +270,25 @@ impl Interpreter {
                 // self.execute_block(&[*body], environment);
             }
             Value::NativeFunction(function) => function.call(&arguments),
+            Value::Class(name, methods) => {
+                let instance = Value::Instance(name, HashMap::new());
+                if let Some(method) = methods.get("_construct") {
+                    match method {
+                        Value::Function(_, params, body, _) => {
+                            let mut environment = Environment::new_with_enclosing(self.environment.clone());
+                            environment.define("this", instance.clone());
+                            for (param, arg) in params.iter().zip(arguments) {
+                                environment.define(param, arg);
+                            }
+                            self.execute_block(&[*body.clone()], environment)?;
+                        }
+                        _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidClassMethod(self.line)))
+                    }
+                }
+                Ok(instance)
+            }, 
             _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::UndefinedFunction(self.line)))
         }
-    }
-    fn execute_class_call(&mut self, instance: Value, callee: Value, arguments: Vec<Value>) -> InterpreterResult<Value> {
-        println!("instance: {:?}", instance);
-        println!("callee: {:?}", callee);
-        println!("arguments: {:?}", arguments);
-        Ok(Value::String("".to_string()))
     }
     fn add(&self, left: Value, right: Value) -> InterpreterResult<Value> {
         match (left, right) {

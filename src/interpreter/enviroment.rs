@@ -166,21 +166,6 @@ impl Environment {
                 )),
             }
         });
-        //Class
-        env.define_native("new", 2, |args| {
-            if let (Value::String(class_name), Value::Class(name, methods)) = (&args[0], &args[1]) {
-                if class_name != name {
-                    return Err(InterpreterError::runtime_error(
-                        crate::error::RuntimeErrorKind::InvalidArgumentType(0)
-                    ));
-                }
-                Ok(Value::Instance(class_name.clone(), methods.clone()))
-            } else {
-                Err(InterpreterError::runtime_error(
-                    crate::error::RuntimeErrorKind::InvalidArgumentType(0)
-                ))
-            }
-        });
         //File
         env.define_native("readFile", 1, |args| {
             if let Value::String(filename) = &args[0] {

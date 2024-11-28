@@ -1,13 +1,12 @@
 class Person {
-    init(name) {
-        name = name;
+    _construct(name) {
+        print("My name " + name);
     }
-    
-    sayHello() {
-        print("Hello, " + name);
+    say(message) {
+        print(message);
     }
 }
 
 // Creating a new instance
-var john = new("Person", Person);
-john.name;
+var john = Person("test");
+print(john);

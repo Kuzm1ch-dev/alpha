@@ -25,8 +25,6 @@ pub enum Expr {
     For(Box<Expr>, Box<Expr>, Box<Expr>, Box<Expr>),
     Import(Box<Expr>),
     Return(Token, Box<Expr>),
-    Get(Box<Expr>, Token),
-    ClassCall(Box<Expr>, Box<Expr>, Vec<Expr>),
     // Set(Box<Expr>, Token, Box<Expr>),
     // This(Token),
     // Super(Token, Token),
@@ -109,17 +107,6 @@ impl Expr {
                     rpn.push(' ');
                 }
                 format!("class {} {}", token.lexeme, rpn)
-            }
-            Expr::Get(object, token) => {
-                format!("get {} {}", token.lexeme, object.to_rpn())
-            }
-            Expr::ClassCall(object, method, arguments) => {
-                let mut rpn = String::new();
-                for argument in arguments {
-                    rpn.push_str(&argument.to_rpn());
-                    rpn.push(' ');
-                }
-                format!("class_call {:?} {} {}", method, object.to_rpn(), rpn)
             }
         }
     }
@@ -302,13 +289,13 @@ impl Parser {
                 }
             }
             if self.check(TokenType::DOT) {
-                if let Ok(expr) = self.class_field() {
-                    return Ok(expr);
-                }
-                match self.class_call() {
-                    Ok(expr) => return Ok(expr),
-                    Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
-                }
+                // if let Ok(expr) = self.class_field() {
+                //     return Ok(expr);
+                // }
+                // match self.class_call() {
+                //     Ok(expr) => return Ok(expr),
+                //     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
+                // }
             }
             if let Ok(expr) = self.assignment() {
                 return Ok(expr);
@@ -557,31 +544,5 @@ impl Parser {
             Expr::Nil
         };
         Ok(Expr::Return(keyword, Box::new(value)))
-    }
-    fn class_field(&mut self) -> InterpreterResult<Expr> {
-        let class_name: Expr = Expr::Variable(self.previous());
-        self.consume(TokenType::DOT)?;
-        let variable = self.consume(TokenType::IDENTIFIER)?;
-        let expr = Expr::Get(Box::new(class_name), variable);
-        println!("expr {:#?}", expr);
-        Ok(expr)
-    }
-    fn class_call(&mut self) -> InterpreterResult<Expr> {
-        let class_name = Expr::Variable(self.previous());
-        self.consume(TokenType::DOT)?;
-        let method = self.consume(TokenType::IDENTIFIER)?;
-        self.consume(TokenType::LEFT_PAREN)?;
-        let mut arguments = Vec::new();
-        // Handle arguments
-        while !self.check(TokenType::RIGHT_PAREN) {
-            loop {
-                arguments.push(self.expression()?);
-                if !self.match_tokens(vec![TokenType::COMMA]) {
-                    break;
-                }
-            }
-        };
-        self.consume(TokenType::RIGHT_PAREN)?;
-        Ok(Expr::ClassCall(Box::new(class_name.clone()), Box::new(Expr::Get(Box::new(class_name), method)), arguments))
     }
 }
