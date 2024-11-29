@@ -118,16 +118,14 @@ impl Interpreter {
                 for arg in arguments {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
-                println!("owner: {:?} callee: {:?} ",owner,callee);
                 if let Some(owner) = owner {
                     let owner = self.evaluate(owner)?;
                     if let Value::Instance(_, env) = owner.clone(){
                         let previous = self.environment.clone();
-                        println!("{:#?}", env);
                         self.environment = env;
                         let callee = self.evaluate(callee)?;
                         self.environment = previous;
-                        self.execute_call(Some(owner), callee, evaluated_args)?;
+                        return self.execute_call(Some(owner), callee, evaluated_args);
                     }
                     Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidCall(0)))
                 } else {
@@ -289,12 +287,16 @@ impl Interpreter {
                 if let Some(method) = methods.get("_construct") {
                     match method {
                         Value::Function(_, params, body, _) => {
+                            // Тут переделать environment
                             for (param, arg) in params.iter().zip(arguments) {
                                 environment.define(param, arg);
                             }
                             self.execute_block(&[*body.clone()], &mut environment)?;
                         }
                         _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidClassMethod(self.line)))
+                    }
+                    for (name,value) in methods{
+                        environment.define(name.as_str(), value);
                     }
                 }
                 let instance = Value::Instance(name, Box::new(environment));

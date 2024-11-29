@@ -10,4 +10,4 @@ class Person {
 
 // Creating a new instance
 var john = Person("test");
-john.say("Test!")
+john.say("HELLO!");
