@@ -100,8 +100,8 @@ impl Interpreter {
                 Ok(value)
             }
             Expr::Block(statements) => {
-                let environment = Environment::new_with_enclosing(self.environment.clone());
-                self.execute_block(statements, environment)
+                let mut environment = Environment::new_with_enclosing(self.environment.clone());
+                self.execute_block(statements, &mut environment)
             }
             Expr::Function(name, params, body) => {
                 let function = Value::Function(
@@ -224,9 +224,9 @@ impl Interpreter {
         }
     }
 
-    fn execute_block(&mut self, statements: &[Expr], environment: Environment) -> InterpreterResult<Value> {
+    fn execute_block(&mut self, statements: &[Expr], environment: &mut Environment) -> InterpreterResult<Value> {
         let previous = self.environment.clone();
-        self.environment = Box::new(environment);
+        self.environment = Box::new(environment.clone());
 
         let mut result = Value::Nil;
         for statement in statements {
@@ -239,6 +239,7 @@ impl Interpreter {
                 Ok(_) => continue,
             }
         }
+        *environment = *self.environment.clone();
         // self.environment = previous;
         let enclosing = self.environment.get_enclosing();
         match enclosing {
@@ -272,7 +273,7 @@ impl Interpreter {
                         environment.define(&value.0, value.1.clone());
                     }
                 }
-                match self.execute_block(&[*body], environment) {
+                match self.execute_block(&[*body], &mut environment) {
                     Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(value))) => {
                         Ok(value)
                     }
@@ -291,7 +292,7 @@ impl Interpreter {
                             for (param, arg) in params.iter().zip(arguments) {
                                 environment.define(param, arg);
                             }
-                            self.execute_block(&[*body.clone()], environment.clone())?;
+                            self.execute_block(&[*body.clone()], &mut environment)?;
                         }
                         _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidClassMethod(self.line)))
                     }
