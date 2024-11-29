@@ -19,7 +19,7 @@ pub enum Expr {
     Block(Vec<Expr>),                       // For block of expressions
     Function(Token, Vec<Token>, Box<Expr>), // Function declaration
     Class(Token, Vec<Expr>),                // Class declaration
-    Call(Box<Expr>, Vec<Expr>),      // Function call
+    Call(Option<Box<Expr>>, Box<Expr>, Vec<Expr>),      // Function call
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     While(Box<Expr>, Box<Expr>),
     For(Box<Expr>, Box<Expr>, Box<Expr>, Box<Expr>),
@@ -74,7 +74,7 @@ impl Expr {
                 rpn.push_str(&body.to_rpn());
                 format!("func {} {}", token.lexeme, rpn)
             }
-            Expr::Call(callee, arguments) => {
+            Expr::Call(owner, callee, arguments) => {
                 let mut rpn = String::new();
                 for argument in arguments {
                     rpn.push_str(&argument.to_rpn());
@@ -282,20 +282,11 @@ impl Parser {
             }
         }
         if self.match_tokens(vec![TokenType::IDENTIFIER]) {
-            if self.check(TokenType::LEFT_PAREN) {
+            if self.check(TokenType::LEFT_PAREN) || self.check(TokenType::DOT) {
                 match self.call() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
                 }
-            }
-            if self.check(TokenType::DOT) {
-                // if let Ok(expr) = self.class_field() {
-                //     return Ok(expr);
-                // }
-                // match self.class_call() {
-                //     Ok(expr) => return Ok(expr),
-                //     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
-                // }
             }
             if let Ok(expr) = self.assignment() {
                 return Ok(expr);
@@ -397,6 +388,28 @@ impl Parser {
     fn call(&mut self) -> InterpreterResult<Expr> {
         let mut expr: Expr = Expr::Variable(self.previous());
         // Now handle the arguments if there are parentheses
+        if self.match_tokens(vec![TokenType::DOT]){
+            let fun_name = self.consume(TokenType::IDENTIFIER)?;
+            let fun = Expr::Variable(fun_name);
+            while self.match_tokens(vec![TokenType::LEFT_PAREN]) {
+                let mut arguments = Vec::new();
+                
+                // Handle arguments
+                if !self.check(TokenType::RIGHT_PAREN) {
+                    loop {
+                        arguments.push(self.expression()?);
+                        if !self.match_tokens(vec![TokenType::COMMA]) {
+                            break;
+                        }
+                    }
+                }
+        
+                self.consume(TokenType::RIGHT_PAREN)?;
+                expr = Expr::Call(Some(Box::new(expr)),Box::new(fun), arguments);
+                println!("class call: {:?}", expr);
+                return Ok(expr);
+            }
+        }
         while self.match_tokens(vec![TokenType::LEFT_PAREN]) {
             let mut arguments = Vec::new();
             
@@ -411,7 +424,7 @@ impl Parser {
             }
     
             self.consume(TokenType::RIGHT_PAREN)?;
-            expr = Expr::Call(Box::new(expr), arguments);
+            expr = Expr::Call(None,Box::new(expr), arguments);
         }
         if matches!(expr, Expr::Call(..)) {
             Ok(expr)
@@ -531,7 +544,7 @@ impl Parser {
         self.consume(TokenType::LEFT_BRACE)?;
         let mut methods = Vec::new();
         while !self.check(TokenType::RIGHT_BRACE) && !self.is_at_end() {
-            methods.push(self.function_declaration()?);
+            methods.push(self.expression()?);
         }
         self.consume(TokenType::RIGHT_BRACE)?;
         Ok(Expr::Class(name, methods))

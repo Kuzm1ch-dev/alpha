@@ -45,9 +45,27 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Function(String, Vec<String>, Box<Expr>, Option<Box<Environment>>),
     Class(String, HashMap<String, Value>), // (class name, methods)
-    Instance(String, HashMap<String, Value>), // (class name, fields)
+    Instance(String, Box<Environment>), // (class name, fields)
     Nil,
 }
+
+// impl Value {
+//     pub fn set_field(&mut self, name: &str, value: Value) {
+//         if let Value::Instance(_, ref mut fields) = self {
+//             fields.insert(name.to_string(), value);
+//         }
+//     }
+    
+//     pub fn get_field(&self, name: &str) -> Option<&Value> {
+//         if let Value::Instance(_, fields) = self {
+//             fields.get(name)
+//         } else {
+//             None
+//         }
+//     }
+// }
+
+
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

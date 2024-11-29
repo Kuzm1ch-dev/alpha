@@ -127,6 +127,7 @@ pub enum RuntimeErrorKind {
     InvalidImport(usize, String),
     InvalidClassMethod(usize),
     IoError(String),
+    InvalidCall(usize),
     Return(Value),
 }
 impl fmt::Display for RuntimeErrorKind {
@@ -200,6 +201,9 @@ impl fmt::Display for RuntimeErrorKind {
             }
             RuntimeErrorKind::InvalidClassMethod(line) => {
                 write!(f, "[line {}] Error: Invalid class method.", line)
+            }
+            RuntimeErrorKind::InvalidCall(line) => {
+                write!(f, "[line {}] Error: Invalid call.", line)
             }
         }
     }

@@ -1,12 +1,13 @@
 class Person {
-    _construct(name) {
+    fun _construct(name) {
         print("My name " + name);
     }
-    say(message) {
+    
+    fun say(message) {
         print(message);
     }
 }
 
 // Creating a new instance
 var john = Person("test");
-print(john);
+john.say("Test!")
