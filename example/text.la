@@ -1,13 +1,14 @@
 class Person {
     fun _construct(name) {
-        print("My name " + name);
+        this.name = name;
+        print("My name " + this.name);
     }
     
     fun say(message) {
-        print(message);
+        print(this.name + " say: " + message)
     }
 }
 
 // Creating a new instance
-var john = Person("test");
+var john = new Person("John");
 john.say("HELLO!");

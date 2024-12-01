@@ -428,6 +428,7 @@ impl Environment {
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.get(name)
         } else {
+            // println!("{:?}",self.values.keys());
             Err(InterpreterError::runtime_error(
                 crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string()),
             ))

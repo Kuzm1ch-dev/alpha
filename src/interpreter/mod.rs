@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::result;
 use enviroment::{Environment, Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
@@ -29,7 +30,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, expressions: Vec<(Expr, usize)>) -> InterpreterResult<Value> {
         let mut last_value = Value::Nil;
-        //println!("expressions: {:#?}", expressions);
+        // println!("expressions: {:#?}", expressions);
         for (expr, line) in expressions {
             self.line = line;
             match self.evaluate(&expr) {
@@ -94,6 +95,22 @@ impl Interpreter {
                 self.environment.assign(&name.lexeme, value.clone())?;
                 Ok(value)
             }
+            Expr::Set(object, name, value) => {
+                let object = self.evaluate(object)?;
+                let value = self.evaluate(value)?;
+                if let Value::Instance(_, mut env) = object.clone() {
+                    env.assign(&name.lexeme, value.clone())?;
+                    return Ok(value);
+                }
+                Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
+            }
+            Expr::Get( object, name) => {
+                let object = self.evaluate(object)?;
+                if let Value::Instance(_, mut env) = object.clone() {
+                    return env.get(&name.lexeme);
+                }
+                Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
+            }
             Expr::Let(name, initializer) => {
                 let value = self.evaluate(initializer)?;
                 self.environment.define(&name.lexeme, value.clone());
@@ -114,7 +131,7 @@ impl Interpreter {
                 Ok(function)
             }
             Expr::Call(owner ,callee, arguments) => {
-                let mut evaluated_args = Vec::new();
+                let mut evaluated_args = Vec::new(); 
                 for arg in arguments {
                     evaluated_args.push(self.evaluate(arg)?);
                 }
@@ -124,8 +141,9 @@ impl Interpreter {
                         let previous = self.environment.clone();
                         self.environment = env;
                         let callee = self.evaluate(callee)?;
+                        let result = self.execute_call(Some(owner), callee, evaluated_args);
                         self.environment = previous;
-                        return self.execute_call(Some(owner), callee, evaluated_args);
+                        return result;
                     }
                     Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidCall(0)))
                 } else {
@@ -291,6 +309,7 @@ impl Interpreter {
                             for (param, arg) in params.iter().zip(arguments) {
                                 environment.define(param, arg);
                             }
+                            environment.define("this", Value::Instance(name.clone(), Box::new(environment.clone())));
                             self.execute_block(&[*body.clone()], &mut environment)?;
                         }
                         _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidClassMethod(self.line)))

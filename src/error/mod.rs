@@ -126,6 +126,8 @@ pub enum RuntimeErrorKind {
     RuntimeError(usize, String),
     InvalidImport(usize, String),
     InvalidClassMethod(usize),
+    InvalidSet(usize),
+    InvalidGet(usize),
     IoError(String),
     InvalidCall(usize),
     Return(Value),
@@ -204,6 +206,12 @@ impl fmt::Display for RuntimeErrorKind {
             }
             RuntimeErrorKind::InvalidCall(line) => {
                 write!(f, "[line {}] Error: Invalid call.", line)
+            }
+            RuntimeErrorKind::InvalidSet(line) => {
+                write!(f, "[line {}] Error: Invalid set.", line)
+            }
+            RuntimeErrorKind::InvalidGet(line) => {
+                write!(f, "[line {}] Error: Invalid get.", line)
             }
         }
     }

@@ -14,18 +14,20 @@ pub enum Expr {
     Unary(Token, Box<Expr>),
     Nil,
     Variable(Token),                        // For variable references
-    Assign(Token, Box<Expr>),               // For variable assignment
+    Assign(Token, Box<Expr>),               // For variable assignment 
     Let(Token, Box<Expr>),                  // For variable declaration
     Block(Vec<Expr>),                       // For block of expressions
     Function(Token, Vec<Token>, Box<Expr>), // Function declaration
     Class(Token, Vec<Expr>),                // Class declaration
-    Call(Option<Box<Expr>>, Box<Expr>, Vec<Expr>),      // Function call
+    Call(Option<Box<Expr>>, Box<Expr>, Vec<Expr>),      // Function call (owner, func, args)
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     While(Box<Expr>, Box<Expr>),
     For(Box<Expr>, Box<Expr>, Box<Expr>, Box<Expr>),
     Import(Box<Expr>),
     Return(Token, Box<Expr>),
-    // Set(Box<Expr>, Token, Box<Expr>),
+    // Break(Token),
+    Get(Box<Expr>, Token),
+    Set(Box<Expr>, Token, Box<Expr>),
     // This(Token),
     // Super(Token, Token),
 }
@@ -107,6 +109,15 @@ impl Expr {
                     rpn.push(' ');
                 }
                 format!("class {} {}", token.lexeme, rpn)
+            }
+            // Expr::Break(token) => {
+            //     format!("break {}", token.lexeme)
+            // }            
+            Expr::Get(object, name) => {
+                format!("get {} {}", object.to_rpn(), name.lexeme)
+            }
+            Expr::Set(object, name, value) => {
+                format!("set {} {} {}", object.to_rpn(), name.lexeme, value.to_rpn())
             }
         }
     }
@@ -276,17 +287,31 @@ impl Parser {
             }
         }
         if self.match_tokens(vec![TokenType::FOR]) {
+
             match self.for_statement() {
                 Ok(expr) => return Ok(expr),
                 Err(e) => return Err(e),
             }
         }
+        // Придумать как отделить вызов функций класса, геттеры и сеттеры
+        if self.match_tokens(vec![TokenType::NEW]) {
+            match self.class_instantiation() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),
+            }
+        }
         if self.match_tokens(vec![TokenType::IDENTIFIER]) {
-            if self.check(TokenType::LEFT_PAREN) || self.check(TokenType::DOT) {
+            if (self.check(TokenType::LEFT_PAREN)){
                 match self.call() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
                 }
+            }
+            if (self.check(TokenType::DOT)){
+                match self.instance_get_or_set() {
+                    Ok(expr) => return Ok(expr),
+                    Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
+                } 
             }
             if let Ok(expr) = self.assignment() {
                 return Ok(expr);
@@ -323,12 +348,6 @@ impl Parser {
         Err(InterpreterError::parser_error(
             crate::error::ParserErrorKind::ExpectExpression(self.peek().lexeme,self.peek().line),
         ))
-        // let a = self.peek();
-        // eprintln!(
-        //     "[line {}] Error at '{}': Expect expression.",
-        //     a.line, a.lexeme
-        // );
-        // std::process::exit(65);
     }
 
     fn consume(&mut self, token_type: TokenType) -> InterpreterResult<Token> {
@@ -373,6 +392,28 @@ impl Parser {
         ))
     }
 
+    fn instance_get_or_set(&mut self) -> InterpreterResult<Expr>{
+        let name = self.previous();
+        if self.match_tokens(vec![TokenType::DOT]) {
+            let var_name = self.consume(TokenType::IDENTIFIER)?;
+            if self.match_tokens(vec![TokenType::EQUAL]){
+                let new_value = self.expression()?;
+                return Ok(Expr::Set(Box::new(Expr::Variable(name)), var_name, Box::new(new_value)));
+            }else if (self.match_tokens(vec![TokenType::LEFT_PAREN])){
+                let fun_name = var_name.clone();
+                let arguments = self.arguments()?;
+                self.consume(TokenType::RIGHT_PAREN)?;
+                let call = Expr::Call(Some(Box::new(Expr::Variable(name))),Box::new(Expr::Variable(fun_name)), arguments);
+                return Ok(call);
+            }
+            return Ok(Expr::Get(Box::new(Expr::Variable(name)),var_name));
+        }
+        Err(InterpreterError::parser_error(
+            crate::error::ParserErrorKind::InvalidAssignmentTarget(self.peek().line),
+        ))
+    }
+    
+
     fn var_declaration(&mut self) -> InterpreterResult<Expr> {
         let name = self.consume(TokenType::IDENTIFIER)?;
 
@@ -392,18 +433,7 @@ impl Parser {
             let fun_name = self.consume(TokenType::IDENTIFIER)?;
             let fun = Expr::Variable(fun_name);
             while self.match_tokens(vec![TokenType::LEFT_PAREN]) {
-                let mut arguments = Vec::new();
-                
-                // Handle arguments
-                if !self.check(TokenType::RIGHT_PAREN) {
-                    loop {
-                        arguments.push(self.expression()?);
-                        if !self.match_tokens(vec![TokenType::COMMA]) {
-                            break;
-                        }
-                    }
-                }
-        
+                let arguments = self.arguments()?;
                 self.consume(TokenType::RIGHT_PAREN)?;
                 expr = Expr::Call(Some(Box::new(expr)),Box::new(fun), arguments);
                 println!("class call: {:?}", expr);
@@ -411,18 +441,7 @@ impl Parser {
             }
         }
         while self.match_tokens(vec![TokenType::LEFT_PAREN]) {
-            let mut arguments = Vec::new();
-            
-            // Handle arguments
-            if !self.check(TokenType::RIGHT_PAREN) {
-                loop {
-                    arguments.push(self.expression()?);
-                    if !self.match_tokens(vec![TokenType::COMMA]) {
-                        break;
-                    }
-                }
-            }
-    
+            let arguments = self.arguments()?;
             self.consume(TokenType::RIGHT_PAREN)?;
             expr = Expr::Call(None,Box::new(expr), arguments);
         }
@@ -535,12 +554,6 @@ impl Parser {
     }
     fn class_declaration(&mut self) -> InterpreterResult<Expr> {
         let name = self.consume(TokenType::IDENTIFIER)?;
-        // let superclass = if self.match_token(TokenType::LESS) {
-        //     self.consume(TokenType::IDENTIFIER)?;
-        //     Some(Box::new(Expr::Variable(self.previous())))
-        // } else {
-        //     None
-        // };
         self.consume(TokenType::LEFT_BRACE)?;
         let mut methods = Vec::new();
         while !self.check(TokenType::RIGHT_BRACE) && !self.is_at_end() {
@@ -548,6 +561,27 @@ impl Parser {
         }
         self.consume(TokenType::RIGHT_BRACE)?;
         Ok(Expr::Class(name, methods))
+    }
+    fn class_instantiation(&mut self) -> InterpreterResult<Expr> {
+        let class_name = self.consume(TokenType::IDENTIFIER)?;
+        let class = Expr::Variable(class_name.clone());
+        self.consume(TokenType::LEFT_PAREN)?;
+        let arguments = self.arguments()?;
+        self.consume(TokenType::RIGHT_PAREN)?;
+        Ok(Expr::Call(None, Box::new(class), arguments))
+    }
+
+    fn arguments(&mut self) -> InterpreterResult<Vec<Expr>> {
+        let mut args = Vec::new();
+        if !self.check(TokenType::RIGHT_PAREN) {
+            loop {
+                args.push(self.expression()?);
+                if !self.match_tokens(vec![TokenType::COMMA]) {
+                    break;
+                }
+            }
+        }
+        Ok(args)
     }
     fn return_statement(&mut self) -> InterpreterResult<Expr> {
         let keyword = self.previous();
