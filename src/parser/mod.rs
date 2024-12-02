@@ -4,6 +4,12 @@ use crate::{
     error::{InterpreterError, InterpreterKind, InterpreterResult},
     tokenizer::{Token, TokenType},
 };
+#[derive(Debug, Clone, PartialEq)]
+pub struct TryCatch {
+    pub try_block: Box<Expr>,
+    pub catch_param: String,  // The error parameter name
+    pub catch_block: Box<Expr>
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -29,6 +35,7 @@ pub enum Expr {
     // Break(Token),
     Get(Box<Expr>, Box<Expr>),
     Set(Box<Expr>, Box<Expr>, Box<Expr>),
+    TryCatch(TryCatch),
     // This(Token),
     // Super(Token, Token),
 }
@@ -250,6 +257,13 @@ impl Parser {
     }
 
     fn primary(&mut self) -> InterpreterResult<Expr> {
+
+        if self.match_tokens(vec![TokenType::TRY]) {
+            match self.try_statement() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),
+            }
+        }
         if self.match_tokens(vec![TokenType::LEFT_BRACE]) {
             match self.block() {
                 Ok(expr) => return Ok(expr),
@@ -424,6 +438,33 @@ impl Parser {
         self.consume(TokenType::RIGHT_BRACKET)?;
         Ok(Expr::Get(Box::new(Expr::Variable(name)), Box::new(index)))
     }
+
+    fn try_statement(&mut self) -> InterpreterResult<Expr> {
+        // Parse try block
+        self.consume(TokenType::LEFT_BRACE)?;
+        let try_block = Box::new(self.block()?);
+        // Expect 'catch' keyword
+        self.consume(TokenType::CATCH)?;
+        
+        // Parse catch parameter
+        self.consume(TokenType::LEFT_PAREN)?;
+        let error_param = match self.peek().token_type {
+            TokenType::IDENTIFIER => self.advance().lexeme,
+            _ => return Err(InterpreterError::parser_error(
+                crate::error::ParserErrorKind::ExpectExpression(self.previous().lexeme, self.peek().line),
+            ))
+        };
+        self.consume(TokenType::RIGHT_PAREN)?;
+        // Parse catch block
+        self.consume(TokenType::LEFT_BRACE)?;
+        let catch_block = Box::new(self.block()?);
+        Ok(Expr::TryCatch(TryCatch {
+            try_block,
+            catch_param: error_param,
+            catch_block,
+        }))
+    }
+
     fn assignment(&mut self) -> InterpreterResult<Expr> {;
         let name = self.previous();
         if self.match_tokens(vec![TokenType::EQUAL]) {
@@ -522,7 +563,6 @@ impl Parser {
     }
     fn block(&mut self) -> InterpreterResult<Expr> {
         let mut statements = Vec::new();
-
         while !self.check(TokenType::RIGHT_BRACE) && !self.is_at_end() {
             statements.push(self.expression()?);
         }

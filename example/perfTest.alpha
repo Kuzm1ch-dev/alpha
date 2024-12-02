@@ -1,0 +1,34 @@
+// Performance test implementation
+fun calculateSumOfSquares(n) {
+    var total = 0;
+    var i = 0;
+    while (i < n) {
+        total = total + (i * i);
+        i = i + 1;
+    }
+    return total;
+}
+
+fun runPerformanceTest() {
+    var iterations = 10000;
+    
+    // Record start time
+    var startTime = clock();
+    
+    // Perform calculation
+    var result = calculateSumOfSquares(iterations);
+    
+    // Record end time
+    var endTime = clock();
+    
+    // Calculate duration (in seconds)
+    var duration = endTime - startTime;
+    
+    print("=== Language Performance Test ===");
+    print("Iterations: " + iterations);
+    print("Result: " + result);
+    print("Time taken: " + duration + " seconds");
+}
+
+// Run the test
+runPerformanceTest();

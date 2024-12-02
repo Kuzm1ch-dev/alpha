@@ -4,7 +4,7 @@ use std::{clone, result};
 use enviroment::{Environment, Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
-use crate::parser::Expr;
+use crate::parser::{Expr, TryCatch};
 use crate::tokenizer::TokenType;
 pub mod enviroment;
 pub struct Interpreter {
@@ -273,6 +273,9 @@ impl Interpreter {
                 self.environment.define(&name.lexeme, class.clone());
                 Ok(class)
             }, 
+            Expr::TryCatch(try_catch) => {
+                self.execute_try_catch(try_catch)
+            }
         }
     }
 
@@ -317,7 +320,6 @@ impl Interpreter {
                     ));
                 }
                 let mut environment = Environment::new_with_enclosing(self.environment.clone());
-                println!("{:?}",size_of_val(&environment));
                 for (param, arg) in params.iter().zip(arguments) {
                     environment.define(param, arg);
                 }
@@ -361,10 +363,44 @@ impl Interpreter {
             _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::UndefinedFunction(self.line)))
         }
     }
+    fn execute_try_catch(&mut self, try_catch: &TryCatch) -> InterpreterResult<Value> {
+        // Create new environment for catch block scope
+        let previous_env = self.environment.clone();
+        
+        // Evaluate try block
+        let result = self.evaluate(&try_catch.try_block);
+        
+        match result {
+            Ok(value) => {
+                // If no error occurred, return the value
+                self.environment = previous_env;
+                Ok(value)
+            }
+            Err(error) => {
+                // Error occurred, execute catch block
+                let mut catch_env = Environment::new_with_enclosing(previous_env.clone());
+                // Bind error to the catch parameter
+                catch_env.define(
+                    &try_catch.catch_param,
+                    Value::String(error.to_string())
+                );
+                // Set catch block environment
+                self.environment = Box::new(catch_env);
+                // Evaluate catch block
+                let catch_result = self.evaluate(&try_catch.catch_block);
+                // Restore previous environment
+                self.environment = previous_env;
+                catch_result
+            }
+        }
+    }
+
+
     fn add(&self, left: Value, right: Value) -> InterpreterResult<Value> {
         match (left, right) {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
             (Value::String(a), Value::String(b)) => Ok(Value::String(a + &b)),
+            (a,b) => Ok(Value::String(a.to_string() + &b.to_string())),
             _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::OperandsMustBeNumbersOrStrings(self.line)))
         }
     }

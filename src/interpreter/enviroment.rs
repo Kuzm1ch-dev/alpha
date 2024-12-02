@@ -50,6 +50,32 @@ pub enum Value {
     Nil,
 }
 
+impl Value {
+    pub fn to_string(&self) -> String {
+        match self {
+            Value::Number(n) => n.to_string(),
+            Value::String(s) => s.clone(),
+            Value::Boolean(b) => b.to_string(),
+            Value::Nil => "nil".to_string(),
+            Value::Function(name, _, _, _) => name.clone(),
+            Value::NativeFunction(nf) => nf.name.clone(),
+            Value::Class(name, _) => name.clone(),
+            Value::Instance(name, _) => name.clone(),
+            Value::Array(arr) => {
+                let mut s = String::new();
+                s.push('[');
+                for (i, v) in arr.iter().enumerate() {
+                    if i > 0 {
+                        s.push_str(", ");
+                    }
+                    s.push_str(&v.to_string());
+                }
+                s.push(']');
+                s
+            }
+        }
+    }
+}
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
