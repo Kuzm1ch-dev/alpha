@@ -47,6 +47,7 @@ pub enum Value {
     Class(String, HashMap<String, Value>), // (class name, methods)
     Instance(String, Box<Environment>), // (class name, fields)
     Array(Vec<Value>),
+    Dictionary(HashMap<String, Value>),
     Nil,
 }
 
@@ -71,6 +72,20 @@ impl Value {
                     s.push_str(&v.to_string());
                 }
                 s.push(']');
+                s
+            },
+            Value::Dictionary(d) => {
+                let mut s = String::new();
+                s.push('{');
+                for (i, (k, v)) in d.iter().enumerate() {
+                    if i > 0 {
+                        s.push_str(", ");
+                    }
+                    s.push_str(&k);
+                    s.push_str(": ");
+                    s.push_str(&v.to_string());
+                }
+                s.push('}');
                 s
             }
         }
@@ -97,6 +112,16 @@ impl fmt::Display for Value {
                     write!(f, "{}", v)?;
                 }
                 write!(f, "]")
+            },
+            Value::Dictionary(d) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in d.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, "}}")
             }
         }
     }
@@ -117,6 +142,7 @@ pub struct Environment {
     modules: HashMap<String, Module>,
     pub base_path: PathBuf,
 }
+
 
 impl Environment {
     pub fn new_empty(base_path: PathBuf) -> Self{
@@ -283,6 +309,18 @@ impl Environment {
                         if i > 0 {
                             result.push_str(",");
                         }
+                        result.push_str(&v.to_string());
+                    }
+                    result
+                },
+                Value::Dictionary(d) => {
+                    let mut result = "".to_string();
+                    for (i, (k, v)) in d.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&k);
+                        result.push_str(": ");
                         result.push_str(&v.to_string());
                     }
                     result

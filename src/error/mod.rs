@@ -126,6 +126,7 @@ pub enum RuntimeErrorKind {
     RuntimeError(usize, String),
     InvalidImport(usize, String),
     InvalidClassMethod(usize),
+    InvalidDictionaryKey(usize),
     InvalidSet(usize),
     InvalidGet(usize),
     IoError(String),
@@ -212,6 +213,9 @@ impl fmt::Display for RuntimeErrorKind {
             }
             RuntimeErrorKind::InvalidGet(line) => {
                 write!(f, "[line {}] Error: Invalid get.", line)
+            }
+            RuntimeErrorKind::InvalidDictionaryKey(line) => {
+                write!(f, "[line {}] Error: Invalid dictionary key.", line)
             }
         }
     }

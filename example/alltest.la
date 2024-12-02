@@ -57,8 +57,20 @@ fun testArrays() {
     var arr = [12, 34, 5, 34, 12];
     print("Array: " + arr);
     print("First element: " + arr[0]); // Should be 1
-    // arr[2] = 10;
-    // print("Modified array: " + arr); // Should show updated value
+    arr[2] = 10;
+    print("Modified array: " + arr); // Should show updated value
+}
+
+fun testDictionary() {
+    print("Dictionary Test:");
+    var dic = dict {
+        "key1":12,
+        "key2":233
+    };
+    print("Map:" + dic);
+    print("key 'key1': " + dic["key1"]); // Should be 1
+    dic["key2"] = 15;
+    print("Modified Map: " + dic); // Should show updated value
 }
 
 // Test error handling
@@ -104,6 +116,7 @@ fun runAllTests() {
     testErrorHandling();
     testNestedFunctions();
     testScope();
+    testDictionary();
     print("=== Tests Complete ===");
 }
 

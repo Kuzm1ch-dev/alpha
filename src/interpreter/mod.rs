@@ -33,6 +33,7 @@ impl Interpreter {
         // println!("expressions: {:#?}", expressions);
         for (expr, line) in expressions {
             self.line = line;
+            //println!("{:?}", expr);
             match self.evaluate(&expr) {
                 Ok(value) => {
                     last_value = value;
@@ -67,6 +68,20 @@ impl Interpreter {
                     values.push(self.evaluate(element)?);
                 }
                 Ok(Value::Array(values))
+            }
+            Expr::Dictionary(elements) => {
+                let mut values = HashMap::new();
+                for (key, value) in elements {
+                    let key = self.evaluate(key)?;
+                    let value = self.evaluate(value)?;
+                    match key {
+                        Value::String(key) => {
+                            values.insert(key, value);
+                        }
+                        _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidDictionaryKey(self.line)))
+                    }
+                }
+                Ok(Value::Dictionary(values))
             }
             Expr::Binary(left, operator, right) => {
                 let left = self.evaluate(left)?;
@@ -103,19 +118,47 @@ impl Interpreter {
                 Ok(value)
             }
             Expr::Set(object, name, value) => {
-                let object = self.evaluate(object)?;
+                let value_name = object.lexeme.clone();
+                let object = self.environment.get(&value_name)?;
                 let value = self.evaluate(value)?;
                 let name = self.evaluate(name)?;
-                if let Value::Instance(_, mut env) = object.clone() {
-                    match name {
-                        Value::String(name) => {
-                            env.assign(&name, value.clone())?;
-                            return Ok(value);
+                match object {
+                    Value::Instance(class, mut env) => {
+                        match name {
+                            Value::String(name) => {
+                                env.assign(&name, value.clone())?;
+                                return Ok(value);
+                            }
+                            _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
                         }
-                        _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
                     }
+                    Value::Array(mut values) => {
+                        match name {
+                            Value::Number(index) => {
+                                if index < values.len() as f64 {
+                                    let index = index as usize;
+                                    values[index] = value.clone();
+                                    self.environment.assign(&value_name, Value::Array(values.clone()))?;
+                                    return Ok(value);
+                                }else {
+                                    return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
+                                }
+                            }
+                            _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
+                        }
+                    }
+                    Value::Dictionary(mut values) => {
+                        match name {
+                            Value::String(key) => {
+                                values.insert(key, value.clone());
+                                self.environment.assign(&value_name, Value::Dictionary(values.clone()))?;
+                                return Ok(value);
+                            }
+                            _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
+                        }
+                    }
+                    _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
                 }
-                Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
             }
             Expr::Get( object, name) => {
                 let object = self.evaluate(object)?;
@@ -142,6 +185,17 @@ impl Interpreter {
                                 }
                             }
                             _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))   
+                        }
+                    }
+                    Value::Dictionary(values) => {
+                        match name {
+                            Value::String(key) => {
+                                match values.get(&key) {
+                                    Some(value) => Ok(value.clone()),
+                                    None => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
+                                }
+                            }
+                            _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
                         }
                     }
                     _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))

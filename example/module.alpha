@@ -1,5 +1,0 @@
-var pi = 3.14;
-
-fun circle_area(r){
-    return pi * pow(r,2);
-}

@@ -18,6 +18,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Literal(Token, String),
     Array(Vec<Expr>),
+    Dictionary(Vec<(Expr, Expr)>),
     Unary(Token, Box<Expr>),
     Nil,
     Variable(Token),                        // For variable references
@@ -34,7 +35,7 @@ pub enum Expr {
     Return(Token, Box<Expr>),
     // Break(Token),
     Get(Box<Expr>, Box<Expr>),
-    Set(Box<Expr>, Box<Expr>, Box<Expr>),
+    Set(Token, Box<Expr>, Box<Expr>),
     TryCatch(TryCatch),
     // This(Token),
     // Super(Token, Token),
@@ -125,7 +126,7 @@ impl Expr {
                 format!("get {} {}", object.to_rpn(), name.to_rpn())
             }
             Expr::Set(object, name, value) => {
-                format!("set {} {} {}", object.to_rpn(), name.to_rpn(), value.to_rpn())
+                format!("set {:?} {} {}", object, name.to_rpn(), value.to_rpn())
             }
             Expr::Array(elements) => {
                 let mut rpn = String::new();
@@ -327,19 +328,19 @@ impl Parser {
             }
         }
         if self.match_tokens(vec![TokenType::IDENTIFIER]) {
-            if (self.check(TokenType::LEFT_BRACKET)){
-                match self.array_access() {
+            if self.check(TokenType::LEFT_BRACKET){
+                match self.array_dictionary_access() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
                 }
             }
-            if (self.check(TokenType::LEFT_PAREN)){
+            if self.check(TokenType::LEFT_PAREN){
                 match self.call() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
                 }
             }
-            if (self.check(TokenType::DOT)){
+            if self.check(TokenType::DOT){
                 match self.instance_or_get_or_set() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
@@ -379,6 +380,12 @@ impl Parser {
                 Ok(expr) => return Ok(expr),
                 Err(e) => return Err(e),
             }
+        }
+        if self.match_tokens(vec![TokenType::DICT]) {
+            match self.dictionary() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
+            } 
         }
         if self.match_tokens(vec![TokenType::SEMICOLON]) {
             return Ok(Expr::Nil);
@@ -431,11 +438,32 @@ impl Parser {
         self.consume(TokenType::RIGHT_BRACKET)?;
         Ok(Expr::Array(elements))
     }
-    fn array_access(&mut self) -> InterpreterResult<Expr>{
-        let name = self.previous();
+    fn dictionary(&mut self) -> InterpreterResult<Expr>{
+        let mut elements = Vec::new();
+        self.consume(TokenType::LEFT_BRACE)?;
+        if !self.check(TokenType::RIGHT_BRACE) {
+            loop {
+                let key = self.expression()?;
+                self.consume(TokenType::COLON)?;
+                let value = self.expression()?;
+                elements.push((key, value));
+                if !self.match_tokens(vec![TokenType::COMMA]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RIGHT_BRACE)?;
+        Ok(Expr::Dictionary(elements))
+    }
+    fn array_dictionary_access(&mut self) -> InterpreterResult<Expr>{
+        let name: Token = self.previous();
         self.consume(TokenType::LEFT_BRACKET)?;
         let index = self.expression()?;
         self.consume(TokenType::RIGHT_BRACKET)?;
+        if self.match_tokens(vec![TokenType::EQUAL]){
+            let new_value = self.expression()?;
+            return Ok(Expr::Set(name, Box::new(index), Box::new(new_value)));
+        }
         Ok(Expr::Get(Box::new(Expr::Variable(name)), Box::new(index)))
     }
 
@@ -482,7 +510,7 @@ impl Parser {
             let var = self.expression()?;
             if self.match_tokens(vec![TokenType::EQUAL]){
                 let new_value = self.expression()?;
-                return Ok(Expr::Set(Box::new(Expr::Variable(name)), Box::new(var), Box::new(new_value)));
+                return Ok(Expr::Set(name, Box::new(var), Box::new(new_value)));
             }else if (self.match_tokens(vec![TokenType::LEFT_PAREN])){
                 let fun_name = var.clone();
                 let arguments = self.arguments()?;
