@@ -46,25 +46,9 @@ pub enum Value {
     Function(String, Vec<String>, Box<Expr>, Option<Box<Environment>>),
     Class(String, HashMap<String, Value>), // (class name, methods)
     Instance(String, Box<Environment>), // (class name, fields)
+    Array(Vec<Value>),
     Nil,
 }
-
-// impl Value {
-//     pub fn set_field(&mut self, name: &str, value: Value) {
-//         if let Value::Instance(_, ref mut fields) = self {
-//             fields.insert(name.to_string(), value);
-//         }
-//     }
-    
-//     pub fn get_field(&self, name: &str) -> Option<&Value> {
-//         if let Value::Instance(_, fields) = self {
-//             fields.get(name)
-//         } else {
-//             None
-//         }
-//     }
-// }
-
 
 
 impl fmt::Display for Value {
@@ -78,6 +62,16 @@ impl fmt::Display for Value {
             Value::NativeFunction(nf) => write!(f, "<native fn {}>", nf.name),
             Value::Class(name, _) => write!(f, "<class {}>", name),
             Value::Instance(name, values) => write!(f, "<instance {} {:#?}>", name, values),
+            Value::Array(arr) => {
+                write!(f, "[")?;
+                for (i, v) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -99,6 +93,16 @@ pub struct Environment {
 }
 
 impl Environment {
+    pub fn new_empty(base_path: PathBuf) -> Self{
+        Environment {
+            values: HashMap::new(),
+            enclosing: None,
+            natives: HashMap::new(),
+            modules: HashMap::new(),
+            base_path
+        }
+    }
+
     pub fn new(base_path: PathBuf) -> Self {
         let mut env = Environment {
             values: HashMap::new(),
@@ -247,6 +251,16 @@ impl Environment {
                 Value::NativeFunction(nf) => format!("<native fn {}>", nf.name),
                 Value::Class(name, _) => format!("<class {}>", name),
                 Value::Instance(name, _) => format!("<instance {}>", name),
+                Value::Array(arr) => {
+                    let mut result = "".to_string();
+                    for (i, v) in arr.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(",");
+                        }
+                        result.push_str(&v.to_string());
+                    }
+                    result
+                }
                 // Add other value types as needed
             };
             Ok(Value::String(string_value))
@@ -343,6 +357,7 @@ impl Environment {
         //String
         env.define_native("len", 1, |args| match &args[0] {
             Value::String(s) => Ok(Value::Number(s.len() as f64)),
+            Value::Array(arr) => Ok(Value::Number(arr.len() as f64)),
             _ => Err(InterpreterError::runtime_error(
                 crate::error::RuntimeErrorKind::InvalidArgumentType(0),
             )),

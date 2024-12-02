@@ -1,14 +1,22 @@
-class Person {
-    fun _construct(name) {
-        this.name = name;
-        print("My name " + this.name);
-    }
-    
-    fun say(message) {
-        print(this.name + " say: " + message)
-    }
+// Basic function definition
+fun add(a, b) {
+    return a + b;
 }
 
-// Creating a new instance
-var john = new Person("John");
-john.say("HELLO!");
+// Variables and assignment
+var x = 10;
+var y = 20;
+
+// Control flow
+if (x < y) {
+    // Output
+    print("x is less than y");
+}
+
+// Loops
+while (x < y) {
+    x = add(x, 1);
+}
+
+// Data structures
+var array = [1, 2, 3, 4];

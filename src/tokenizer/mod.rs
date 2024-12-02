@@ -8,6 +8,8 @@ pub enum TokenType {
     RIGHT_PAREN,
     LEFT_BRACE,
     RIGHT_BRACE,
+    LEFT_BRACKET,
+    RIGHT_BRACKET,
     COMMA,
     DOT,
     MINUS,
@@ -65,11 +67,6 @@ pub struct Tokenizer {
     pub line: usize,
     pub errors: Vec<Box<dyn Error>>,
 }
-
-fn some_function() -> InterpreterResult<()> {
-    Ok(())
-}
-
 impl Tokenizer {
     pub fn new() -> Self {
         Tokenizer {
@@ -96,6 +93,18 @@ impl Tokenizer {
                 ')' => self.add_token(Token {
                     token_type: TokenType::RIGHT_PAREN,
                     lexeme: ")".to_string(),
+                    literal: None,
+                    line: self.line,
+                }),
+                '[' => self.add_token(Token {
+                    token_type: TokenType::LEFT_BRACKET,
+                    lexeme: "[".to_string(),
+                    literal: None,
+                    line: self.line,
+                }),
+                ']' => self.add_token(Token {
+                    token_type: TokenType::RIGHT_BRACKET,
+                    lexeme: "]".to_string(),
                     literal: None,
                     line: self.line,
                 }),

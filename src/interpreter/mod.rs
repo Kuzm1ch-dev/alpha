@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::result;
+use std::{clone, result};
 use enviroment::{Environment, Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
@@ -61,6 +61,13 @@ impl Interpreter {
                     _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidLiteral(token.line)))
                 }
             }
+            Expr::Array(elements) => {
+                let mut values = Vec::new();
+                for element in elements {
+                    values.push(self.evaluate(element)?);
+                }
+                Ok(Value::Array(values))
+            }
             Expr::Binary(left, operator, right) => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
@@ -98,18 +105,47 @@ impl Interpreter {
             Expr::Set(object, name, value) => {
                 let object = self.evaluate(object)?;
                 let value = self.evaluate(value)?;
+                let name = self.evaluate(name)?;
                 if let Value::Instance(_, mut env) = object.clone() {
-                    env.assign(&name.lexeme, value.clone())?;
-                    return Ok(value);
+                    match name {
+                        Value::String(name) => {
+                            env.assign(&name, value.clone())?;
+                            return Ok(value);
+                        }
+                        _ => return Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
+                    }
                 }
                 Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidSet(self.line)))
             }
             Expr::Get( object, name) => {
                 let object = self.evaluate(object)?;
-                if let Value::Instance(_, mut env) = object.clone() {
-                    return env.get(&name.lexeme);
+                let name = self.evaluate(name)?;
+                match object {
+                    Value::Instance(_, env) => {
+                        match name {
+                            Value::String(name) => {
+                                match env.get(&name) {
+                                    Ok(value) => Ok(value),
+                                    Err(_) => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
+                                }
+                            }
+                            _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
+                        }
+                    }
+                    Value::Array(values) => {
+                        match name {
+                            Value::Number(index) => {
+                                if index < values.len() as f64 {
+                                    return Ok(values[index as usize].clone());
+                                }else {
+                                    Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
+                                }
+                            }
+                            _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))   
+                        }
+                    }
+                    _ => Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
                 }
-                Err(InterpreterError::runtime_error(crate::error::RuntimeErrorKind::InvalidGet(self.line)))
             }
             Expr::Let(name, initializer) => {
                 let value = self.evaluate(initializer)?;
@@ -281,6 +317,7 @@ impl Interpreter {
                     ));
                 }
                 let mut environment = Environment::new_with_enclosing(self.environment.clone());
+                println!("{:?}",size_of_val(&environment));
                 for (param, arg) in params.iter().zip(arguments) {
                     environment.define(param, arg);
                 }
@@ -301,7 +338,7 @@ impl Interpreter {
             }
             Value::NativeFunction(function) => function.call(&arguments),
             Value::Class(name, methods) => {
-                let mut environment = Environment::new(self.environment.clone().base_path);
+                let mut environment = Environment::new_with_enclosing(self.environment.clone());
                 if let Some(method) = methods.get("_construct") {
                     match method {
                         Value::Function(_, params, body, _) => {

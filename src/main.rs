@@ -11,11 +11,11 @@ pub mod error;
 pub mod interpreter;
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
+    if args.len() < 1 {
+        writeln!(io::stderr(), "Usage: {} alpha <filename>", args[0]).unwrap();
         return;
     }
-    let filename = &args[2];
+    let filename = &args[1];
     let file_path = PathBuf::from(filename);
     let base_dir = file_path.parent()
         .unwrap_or_else(|| Path::new(""))

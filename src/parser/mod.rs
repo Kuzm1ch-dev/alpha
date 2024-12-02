@@ -11,6 +11,7 @@ pub enum Expr {
     Logical(Box<Expr>, Token, Box<Expr>),
     Grouping(Box<Expr>),
     Literal(Token, String),
+    Array(Vec<Expr>),
     Unary(Token, Box<Expr>),
     Nil,
     Variable(Token),                        // For variable references
@@ -26,8 +27,8 @@ pub enum Expr {
     Import(Box<Expr>),
     Return(Token, Box<Expr>),
     // Break(Token),
-    Get(Box<Expr>, Token),
-    Set(Box<Expr>, Token, Box<Expr>),
+    Get(Box<Expr>, Box<Expr>),
+    Set(Box<Expr>, Box<Expr>, Box<Expr>),
     // This(Token),
     // Super(Token, Token),
 }
@@ -114,10 +115,21 @@ impl Expr {
             //     format!("break {}", token.lexeme)
             // }            
             Expr::Get(object, name) => {
-                format!("get {} {}", object.to_rpn(), name.lexeme)
+                format!("get {} {}", object.to_rpn(), name.to_rpn())
             }
             Expr::Set(object, name, value) => {
-                format!("set {} {} {}", object.to_rpn(), name.lexeme, value.to_rpn())
+                format!("set {} {} {}", object.to_rpn(), name.to_rpn(), value.to_rpn())
+            }
+            Expr::Array(elements) => {
+                let mut rpn = String::new();
+                for element in elements {
+                    rpn.push_str(&element.to_rpn());
+                    rpn.push(' ');
+                }
+                format!("array {}", rpn)
+            }
+            _ => {
+                format!("unknown")
             }
         }
     }
@@ -301,6 +313,12 @@ impl Parser {
             }
         }
         if self.match_tokens(vec![TokenType::IDENTIFIER]) {
+            if (self.check(TokenType::LEFT_BRACKET)){
+                match self.array_access() {
+                    Ok(expr) => return Ok(expr),
+                    Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
+                }
+            }
             if (self.check(TokenType::LEFT_PAREN)){
                 match self.call() {
                     Ok(expr) => return Ok(expr),
@@ -308,7 +326,7 @@ impl Parser {
                 }
             }
             if (self.check(TokenType::DOT)){
-                match self.instance_get_or_set() {
+                match self.instance_or_get_or_set() {
                     Ok(expr) => return Ok(expr),
                     Err(e) => return Err(e),  // If it looks like a call but isn't valid, return error
                 } 
@@ -340,6 +358,12 @@ impl Parser {
             match self.previous().literal {
                 Some(literal) => return Ok(Expr::Literal(self.previous(), literal)),
                 None => return Ok(Expr::Literal(self.previous(), "null".to_string())),
+            }
+        }
+        if self.match_tokens(vec![TokenType::LEFT_BRACKET]) {
+            match self.array() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),
             }
         }
         if self.match_tokens(vec![TokenType::SEMICOLON]) {
@@ -380,7 +404,26 @@ impl Parser {
         let name = self.previous();
         Ok(Expr::Variable(name))
     }
-
+    fn array(&mut self) -> InterpreterResult<Expr>{
+        let mut elements = Vec::new();
+        if !self.check(TokenType::RIGHT_BRACKET) {
+            loop {
+                elements.push(self.expression()?);
+                if !self.match_tokens(vec![TokenType::COMMA]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RIGHT_BRACKET)?;
+        Ok(Expr::Array(elements))
+    }
+    fn array_access(&mut self) -> InterpreterResult<Expr>{
+        let name = self.previous();
+        self.consume(TokenType::LEFT_BRACKET)?;
+        let index = self.expression()?;
+        self.consume(TokenType::RIGHT_BRACKET)?;
+        Ok(Expr::Get(Box::new(Expr::Variable(name)), Box::new(index)))
+    }
     fn assignment(&mut self) -> InterpreterResult<Expr> {;
         let name = self.previous();
         if self.match_tokens(vec![TokenType::EQUAL]) {
@@ -392,21 +435,21 @@ impl Parser {
         ))
     }
 
-    fn instance_get_or_set(&mut self) -> InterpreterResult<Expr>{
+    fn instance_or_get_or_set(&mut self) -> InterpreterResult<Expr>{
         let name = self.previous();
         if self.match_tokens(vec![TokenType::DOT]) {
-            let var_name = self.consume(TokenType::IDENTIFIER)?;
+            let var = self.expression()?;
             if self.match_tokens(vec![TokenType::EQUAL]){
                 let new_value = self.expression()?;
-                return Ok(Expr::Set(Box::new(Expr::Variable(name)), var_name, Box::new(new_value)));
+                return Ok(Expr::Set(Box::new(Expr::Variable(name)), Box::new(var), Box::new(new_value)));
             }else if (self.match_tokens(vec![TokenType::LEFT_PAREN])){
-                let fun_name = var_name.clone();
+                let fun_name = var.clone();
                 let arguments = self.arguments()?;
                 self.consume(TokenType::RIGHT_PAREN)?;
-                let call = Expr::Call(Some(Box::new(Expr::Variable(name))),Box::new(Expr::Variable(fun_name)), arguments);
+                let call = Expr::Call(Some(Box::new(Expr::Variable(name))),Box::new(fun_name), arguments);
                 return Ok(call);
             }
-            return Ok(Expr::Get(Box::new(Expr::Variable(name)),var_name));
+            return Ok(Expr::Get(Box::new(Expr::Variable(name)),Box::new(var)));
         }
         Err(InterpreterError::parser_error(
             crate::error::ParserErrorKind::InvalidAssignmentTarget(self.peek().line),
