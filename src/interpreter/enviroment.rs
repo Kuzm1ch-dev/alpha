@@ -21,12 +21,12 @@ pub struct Environment {
     // Use FxHashMap instead of HashMap for better performance
     values: FxHashMap<String, Value>,
     // Avoid Box for small environments
-    enclosing: Option<Arc<Mutex<Environment>>>,
+    pub enclosing: Option<Arc<Mutex<Environment>>>,
     // Separate native functions to global environment only
     natives: FxHashMap<String, NativeFunction>,
     // Consider using string interning for module names
     modules: FxHashMap<String, Module>,
-    depth: usize,
+    pub depth: usize,
     // Cache frequently accessed values
     cache: FxHashMap<String, (usize, Value)>,
     pub base_path: PathBuf,

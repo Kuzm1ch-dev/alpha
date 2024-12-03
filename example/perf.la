@@ -7,7 +7,7 @@ fun fibonacci(n) {
 
 // Run benchmarks
 print("Starting benchmarks...");
-var count = 9;
+var count = 8;
 var start = clock();
 var fib_result = fibonacci(count);
 var fib_time = clock() - start;

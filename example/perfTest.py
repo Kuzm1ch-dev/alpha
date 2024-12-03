@@ -1,30 +1,15 @@
 import time
 
-def calculate_sum_of_squares(n):
-    total = 0
-    for i in range(n):
-        total += i * i
-    return total
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
 
-def run_performance_test():
-    iterations = 10000
-    
-    # Record start time
-    start_time = time.time()
-    
-    # Perform calculation
-    result = calculate_sum_of_squares(iterations)
-    
-    # Record end time
-    end_time = time.time()
-    
-    # Calculate duration
-    duration = end_time - start_time
-    
-    print("=== Python Performance Test ===")
-    print(f"Iterations: {iterations}")
-    print(f"Result: {result}")
-    print(f"Time taken: {duration:.4f} seconds")
-
+def run_benchmark():
+    # Test 1: Fibonacci
+    start = time.time()
+    fib_result = fibonacci(8)
+    fib_time = time.time() - start
+    print(f"Python Fibonacci(8): {fib_result}, Time: {fib_time:.4f} seconds")
 if __name__ == "__main__":
-    run_performance_test()
+    run_benchmark()

@@ -1,4 +1,5 @@
 use enviroment::Environment;
+use std::any::Any;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -6,7 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use value::Value;
+use value::{Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
 use crate::parser::{Expr, TryCatch};
@@ -14,6 +15,7 @@ use crate::tokenizer::TokenType;
 pub mod enviroment;
 pub mod native;
 pub mod value;
+
 pub struct Interpreter {
     environment: Arc<Mutex<Environment>>,
     line: usize,
@@ -66,14 +68,14 @@ impl Interpreter {
                 )),
             },
             Expr::Variable(name) => {
-                let value = self
-                    .environment
-                    .lock().unwrap()
-                    .get(&name.lexeme);
+                let value = self.environment.lock().unwrap().get(&name.lexeme);
                 match value {
                     Some(value) => Ok(value.clone()),
                     None => Err(InterpreterError::runtime_error(
-                        crate::error::RuntimeErrorKind::UndefinedVariable(self.line, name.lexeme.clone()),
+                        crate::error::RuntimeErrorKind::UndefinedVariable(
+                            self.line,
+                            name.lexeme.clone(),
+                        ),
                     )),
                 }
             }
@@ -135,21 +137,36 @@ impl Interpreter {
             }
             Expr::Assign(name, value) => {
                 let evaluated_value = self.evaluate(value)?;
-                self.environment.lock().unwrap().assign(&name.lexeme, evaluated_value.clone())?;
+                self.environment
+                    .lock()
+                    .unwrap()
+                    .assign(&name.lexeme, evaluated_value.clone())?;
                 Ok(evaluated_value)
             }
             Expr::Set(object, name, value) => {
                 let value_name = object.lexeme.clone();
-                let object = self.environment.lock().unwrap().get(&value_name)
-                .ok_or_else(|| InterpreterError::runtime_error(
-                    crate::error::RuntimeErrorKind::UndefinedVariable(self.line, value_name.clone())
-                ))?;
+                let object = self
+                    .environment
+                    .lock()
+                    .unwrap()
+                    .get(&value_name)
+                    .ok_or_else(|| {
+                        InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::UndefinedVariable(
+                                self.line,
+                                value_name.clone(),
+                            ),
+                        )
+                    })?;
                 let value = self.evaluate(value)?;
                 let name = self.evaluate(name)?;
                 match object {
                     Value::Instance(class, mut env) => match name {
                         Value::String(name) => {
-                            self.environment.lock().unwrap().assign(&name, value.clone())?;
+                            self.environment
+                                .lock()
+                                .unwrap()
+                                .assign(&name, value.clone())?;
                             return Ok(value);
                         }
                         _ => {
@@ -163,7 +180,10 @@ impl Interpreter {
                             if index < values.len() as f64 {
                                 let index = index as usize;
                                 values[index] = value.clone();
-                                self.environment.lock().unwrap().assign(&value_name, Value::Array(values.clone()))?;
+                                self.environment
+                                    .lock()
+                                    .unwrap()
+                                    .assign(&value_name, Value::Array(values.clone()))?;
                                 return Ok(value);
                             } else {
                                 return Err(InterpreterError::runtime_error(
@@ -180,7 +200,10 @@ impl Interpreter {
                     Value::Dictionary(mut values) => match name {
                         Value::String(key) => {
                             values.insert(key, value.clone());
-                            self.environment.lock().unwrap().assign(&value_name, Value::Dictionary(values.clone()))?;
+                            self.environment
+                                .lock()
+                                .unwrap()
+                                .assign(&value_name, Value::Dictionary(values.clone()))?;
                             return Ok(value);
                         }
                         _ => {
@@ -189,9 +212,11 @@ impl Interpreter {
                             ))
                         }
                     },
-                    _ => return Err(InterpreterError::runtime_error(
-                        crate::error::RuntimeErrorKind::InvalidSet(self.line),
-                    )),
+                    _ => {
+                        return Err(InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::InvalidSet(self.line),
+                        ))
+                    }
                 }
             }
             Expr::Get(object, name) => {
@@ -200,11 +225,12 @@ impl Interpreter {
                 match object {
                     Value::Instance(_, env) => match name {
                         Value::String(name) => {
-                            self.environment.lock().unwrap().get(&name)
-                            .ok_or_else(|| InterpreterError::runtime_error(
-                                crate::error::RuntimeErrorKind::InvalidGet(self.line)
-                            ))
-                        },
+                            self.environment.lock().unwrap().get(&name).ok_or_else(|| {
+                                InterpreterError::runtime_error(
+                                    crate::error::RuntimeErrorKind::InvalidGet(self.line),
+                                )
+                            })
+                        }
                         _ => Err(InterpreterError::runtime_error(
                             crate::error::RuntimeErrorKind::InvalidGet(self.line),
                         )),
@@ -241,11 +267,15 @@ impl Interpreter {
             }
             Expr::Let(name, initializer) => {
                 let value = self.evaluate(initializer)?;
-                self.environment.lock().unwrap().define(&name.lexeme, value.clone());
+                self.environment
+                    .lock()
+                    .unwrap()
+                    .define(&name.lexeme, value.clone());
                 Ok(value)
             }
             Expr::Block(statements) => {
-                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 self.execute_block(statements, environment)
             }
             Expr::Function(name, params, body) => {
@@ -255,7 +285,10 @@ impl Interpreter {
                     body.clone(),
                     Some(Arc::clone(&self.environment)),
                 );
-                self.environment.lock().unwrap().define(&name.lexeme, function.clone());
+                self.environment
+                    .lock()
+                    .unwrap()
+                    .define(&name.lexeme, function.clone());
                 Ok(function)
             }
             Expr::Call(owner, callee, arguments) => {
@@ -376,7 +409,10 @@ impl Interpreter {
                     }
                 }
                 let class = Value::Class(name.lexeme.clone(), class_methods);
-                self.environment.lock().unwrap().define(&name.lexeme, class.clone());
+                self.environment
+                    .lock()
+                    .unwrap()
+                    .define(&name.lexeme, class.clone());
                 Ok(class)
             }
             Expr::TryCatch(try_catch) => self.execute_try_catch(try_catch),
@@ -390,7 +426,6 @@ impl Interpreter {
     ) -> InterpreterResult<Value> {
         let previous = self.environment.clone();
         self.environment = environment;
-
         let mut result = Value::Nil;
         for statement in statements {
             match self.evaluate(statement) {
@@ -405,16 +440,6 @@ impl Interpreter {
             }
         }
         self.environment = previous;
-        // let mut env = (*self.environment).borrow_mut();
-        // let enclosing = env.get_enclosing();
-        // match enclosing {
-        //     Some(enclosing) => {
-        //         self.environment = enclosing;
-        //     }
-        //     None => {
-        //         self.environment = previous;
-        //     }
-        // }
         match result {
             Value::Nil => Ok(Value::Nil),
             _ => Err(InterpreterError::runtime_error(
@@ -440,13 +465,17 @@ impl Interpreter {
                         ),
                     ));
                 }
-                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 for (param, arg) in params.iter().zip(arguments) {
                     environment.lock().unwrap().define(param, arg);
                 }
                 if let Some(closure_env) = closure_env {
                     for value in closure_env.lock().unwrap().get_values() {
-                        environment.lock().unwrap().define(&value.0, value.1.clone());
+                        environment
+                            .lock()
+                            .unwrap()
+                            .define(&value.0, value.1.clone());
                     }
                 }
                 match self.execute_block(&[*body], environment) {
@@ -460,7 +489,8 @@ impl Interpreter {
             }
             Value::NativeFunction(function) => function.call(&arguments),
             Value::Class(name, methods) => {
-                let mut environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let mut environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 if let Some(method) = methods.get("_construct") {
                     match method {
                         Value::Function(_, params, body, _) => {
@@ -468,10 +498,10 @@ impl Interpreter {
                             for (param, arg) in params.iter().zip(arguments) {
                                 environment.lock().unwrap().define(param, arg);
                             }
-                            environment.lock().unwrap().define(
-                                "this",
-                                Value::Instance(name.clone(), environment.clone()),
-                            );
+                            environment
+                                .lock()
+                                .unwrap()
+                                .define("this", Value::Instance(name.clone(), environment.clone()));
                             self.execute_block(&[*body.clone()], Arc::clone(&environment))?;
                         }
                         _ => {
@@ -507,9 +537,13 @@ impl Interpreter {
             }
             Err(error) => {
                 // Error occurred, execute catch block
-                let mut catch_env = Environment::new_with_enclosing(Some(Arc::clone(&previous_env)));
+                let mut catch_env =
+                    Environment::new_with_enclosing(Some(Arc::clone(&previous_env)));
                 // Bind error to the catch parameter
-                catch_env.lock().unwrap().define(&try_catch.catch_param, Value::String(error.to_string()));
+                catch_env
+                    .lock()
+                    .unwrap()
+                    .define(&try_catch.catch_param, Value::String(error.to_string()));
                 // Set catch block environment
                 self.environment = catch_env;
                 // Evaluate catch block

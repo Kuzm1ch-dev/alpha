@@ -105,6 +105,7 @@ impl fmt::Display for ParserErrorKind {
 }
 #[derive(Debug)]
 pub enum RuntimeErrorKind {
+    InvalidTailCall(usize),
     InvalidNumber(usize),
     InvalidLiteral(usize),
     InvalidBinaryOperator(usize),
@@ -216,6 +217,9 @@ impl fmt::Display for RuntimeErrorKind {
             }
             RuntimeErrorKind::InvalidDictionaryKey(line) => {
                 write!(f, "[line {}] Error: Invalid dictionary key.", line)
+            }
+            RuntimeErrorKind::InvalidTailCall(line) => {
+                write!(f, "[line {}] Error: Invalid Tail Call.", line)
             }
         }
     }
