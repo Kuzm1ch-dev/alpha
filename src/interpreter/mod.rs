@@ -428,15 +428,20 @@ impl Interpreter {
         self.environment = environment;
         let mut result = Value::Nil;
         for statement in statements {
-            match self.evaluate(statement) {
-                Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
-                    value,
-                ))) => {
-                    result = value.clone();
-                    break;
+            match statement {
+                Expr::Return(_, expr) => {
+                    println!("RETURN {:?}", expr);
                 }
-                Err(e) => return Err(e),
-                Ok(_) => continue,
+                _ => match self.evaluate(statement) {
+                    Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
+                        value,
+                    ))) => {
+                        result = value.clone();
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                    Ok(_) => continue,
+                }
             }
         }
         self.environment = previous;
