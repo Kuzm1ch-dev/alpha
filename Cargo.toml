@@ -7,6 +7,8 @@ rust-version = "1.80"
 
 [dependencies]
 rand = "*"
+rustc-hash = "2.1.0"
+string-interner = "0.18.0"
 [profile.dev]
 debug = true
 

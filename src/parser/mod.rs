@@ -240,7 +240,7 @@ impl Parser {
 
     fn factor(&mut self) -> InterpreterResult<Expr> {
         let mut expr = self.unary()?;
-        while self.match_tokens(vec![TokenType::SLASH, TokenType::STAR]) {
+        while self.match_tokens(vec![TokenType::SLASH, TokenType::STAR, TokenType::MODULO]) {
             let operator = self.previous();
             let right = self.unary()?;
             expr = Expr::Binary(Box::new(expr), operator, Box::new(right));

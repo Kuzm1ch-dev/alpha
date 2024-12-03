@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::{interpreter::enviroment::Value, tokenizer::{Token, TokenType}};
+use crate::{interpreter::value::Value, tokenizer::{Token, TokenType}};
 #[derive(Debug)]
 pub struct InterpreterKind {
     message: String,

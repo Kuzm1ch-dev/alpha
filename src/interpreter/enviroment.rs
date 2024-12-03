@@ -1,166 +1,47 @@
-use std::{cell::RefCell, collections::{btree_map::Values, HashMap}, fmt, io::Write, path::{Path, PathBuf}, rc::Rc};
+use std::{cell::RefCell, collections::{btree_map::Values, HashMap}, fmt, io::Write, path::{Path, PathBuf}, rc::Rc, sync::{Arc, Mutex}};
+
+use rustc_hash::FxHashMap;
 
 use crate::{
     error::{InterpreterError, InterpreterResult},
     parser::{Expr, Parser}, tokenizer::Tokenizer,
 };
 
-use super::Interpreter;
-
-#[derive(Clone, Debug)]
-pub struct NativeFunction {
-    name: String,
-    arity: usize,
-    func: fn(&Vec<Value>) -> InterpreterResult<Value>,
-}
-
-impl NativeFunction {
-    pub fn new(
-        name: &str,
-        arity: usize,
-        func: fn(&Vec<Value>) -> InterpreterResult<Value>,
-    ) -> Self {
-        NativeFunction {
-            name: name.to_string(),
-            arity,
-            func,
-        }
-    }
-
-    pub fn call(&self, args: &Vec<Value>) -> InterpreterResult<Value> {
-        if args.len() != self.arity {
-            return Err(InterpreterError::runtime_error(
-                crate::error::RuntimeErrorKind::InvalidParametsCount(self.arity),
-            ));
-        }
-        (self.func)(args)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Value {
-    Number(f64),
-    String(String),
-    Boolean(bool),
-    NativeFunction(NativeFunction),
-    Function(String, Vec<String>, Box<Expr>, Option<Box<Environment>>),
-    Class(String, HashMap<String, Value>), // (class name, methods)
-    Instance(String, Box<Environment>), // (class name, fields)
-    Array(Vec<Value>),
-    Dictionary(HashMap<String, Value>),
-    Nil,
-}
-
-impl Value {
-    pub fn to_string(&self) -> String {
-        match self {
-            Value::Number(n) => n.to_string(),
-            Value::String(s) => s.clone(),
-            Value::Boolean(b) => b.to_string(),
-            Value::Nil => "nil".to_string(),
-            Value::Function(name, _, _, _) => name.clone(),
-            Value::NativeFunction(nf) => nf.name.clone(),
-            Value::Class(name, _) => name.clone(),
-            Value::Instance(name, _) => name.clone(),
-            Value::Array(arr) => {
-                let mut s = String::new();
-                s.push('[');
-                for (i, v) in arr.iter().enumerate() {
-                    if i > 0 {
-                        s.push_str(", ");
-                    }
-                    s.push_str(&v.to_string());
-                }
-                s.push(']');
-                s
-            },
-            Value::Dictionary(d) => {
-                let mut s = String::new();
-                s.push('{');
-                for (i, (k, v)) in d.iter().enumerate() {
-                    if i > 0 {
-                        s.push_str(", ");
-                    }
-                    s.push_str(&k);
-                    s.push_str(": ");
-                    s.push_str(&v.to_string());
-                }
-                s.push('}');
-                s
-            }
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Value::Number(n) => write!(f, "{}", n),
-            Value::String(s) => write!(f, "{}", s),
-            Value::Boolean(b) => write!(f, "{}", b),
-            Value::Nil => write!(f, "nil"),
-            Value::Function(name, _, _, _) => write!(f, "<fn {}>", name),
-            Value::NativeFunction(nf) => write!(f, "<native fn {}>", nf.name),
-            Value::Class(name, _) => write!(f, "<class {}>", name),
-            Value::Instance(name, values) => write!(f, "<instance {} {:#?}>", name, values),
-            Value::Array(arr) => {
-                write!(f, "[")?;
-                for (i, v) in arr.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", v)?;
-                }
-                write!(f, "]")
-            },
-            Value::Dictionary(d) => {
-                write!(f, "{{")?;
-                for (i, (k, v)) in d.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}: {}", k, v)?;
-                }
-                write!(f, "}}")
-            }
-        }
-    }
-}
+use super::{native::NativeFunction, value::Value, Interpreter};
 
 #[derive(Clone, Debug)]
 pub struct Module {
     pub name: String,
-    pub environment: Box<Environment>,
+    pub environment: Arc<Mutex<Environment>>,
     pub path: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct Environment {
-    values: HashMap<String, Value>,
-    enclosing: Option<Box<Environment>>,
-    natives: HashMap<String, NativeFunction>,
-    modules: HashMap<String, Module>,
+    // Use FxHashMap instead of HashMap for better performance
+    values: FxHashMap<String, Value>,
+    // Avoid Box for small environments
+    enclosing: Option<Arc<Mutex<Environment>>>,
+    // Separate native functions to global environment only
+    natives: FxHashMap<String, NativeFunction>,
+    // Consider using string interning for module names
+    modules: FxHashMap<String, Module>,
+    depth: usize,
+    // Cache frequently accessed values
+    cache: FxHashMap<String, (usize, Value)>,
     pub base_path: PathBuf,
 }
 
 
 impl Environment {
-    pub fn new_empty(base_path: PathBuf) -> Self{
-        Environment {
-            values: HashMap::new(),
-            enclosing: None,
-            natives: HashMap::new(),
-            modules: HashMap::new(),
-            base_path
-        }
-    }
-
     pub fn new(base_path: PathBuf) -> Self {
         let mut env = Environment {
-            values: HashMap::new(),
+            values: FxHashMap::default(),
+            natives: FxHashMap::default(),
+            modules: FxHashMap::default(),
+            cache: FxHashMap::default(),
             enclosing: None,
-            natives: HashMap::new(),
-            modules: HashMap::new(),
+            depth: 0,
             base_path
         };
 
@@ -475,18 +356,23 @@ impl Environment {
     }
 
 
-    pub fn new_with_enclosing(enclosing: Box<Environment>) -> Self {
-        let base_path = enclosing.base_path.clone();
-        Environment {
-            values: HashMap::new(),
-            enclosing: Some(enclosing),
-            natives: HashMap::new(),
-            modules: HashMap::new(),
-            base_path
-        }
+    pub fn new_with_enclosing(enclosing: Option<Arc<Mutex<Environment>>>) -> Arc<Mutex<Self>> {
+        let depth = enclosing.as_ref().map_or(0, |e| e.lock().unwrap().depth + 1);
+        Arc::new(Mutex::new(Self {
+            natives: FxHashMap::default(),
+            modules: FxHashMap::default(),
+            values: FxHashMap::default(),
+            enclosing,
+            depth,
+            cache: FxHashMap::default(),
+            base_path: PathBuf::from(".".to_string())
+        }))
     }
 
-    pub fn get_enclosing(&self) -> Option<Box<Environment>> {
+    pub fn get_values(&self) -> FxHashMap<String, Value> {
+        self.values.clone()
+    }
+    pub fn get_enclosing(&self) -> Option<Arc<Mutex<Environment>>> {
         self.enclosing.clone()
     }
 
@@ -494,28 +380,64 @@ impl Environment {
         self.values.insert(name.to_string(), value);
     }
 
-    pub fn get(&self, name: &str) -> InterpreterResult<Value> {
-        // Check if this is a module access (contains dot)
-        if let Some(value) = self.get_from_module( name) {
-            return Ok(value);
-        }
-        if let Some(native) = self.natives.get(name) {
-            return Ok(Value::NativeFunction(native.clone()));
-        }
+    pub fn get(&self, name: &str) -> Option<Value> {
         if let Some(value) = self.values.get(name) {
-            Ok(value.clone())
-        } else if let Some(enclosing) = &self.enclosing {
-            enclosing.get(name)
+            Some(value.clone())
+        } else if let Some(value) = self.natives.get(name) {
+            Some(Value::NativeFunction(value.clone()))
+        }else if let Some(enclosing) = &self.enclosing {
+            enclosing.lock().unwrap().get(name)
         } else {
-            // println!("{:?}",self.values.keys());
+            None
+        }
+    }
+
+    pub fn assign(&mut self, name: &str, value: Value) -> InterpreterResult<Value> {
+        if self.values.contains_key(name) {
+            self.values.insert(name.to_string(), value.clone());
+            Ok(value)
+        } 
+        else if let Some(enclosing) = &self.enclosing {
+            enclosing.lock().unwrap().assign(name, value)
+        } 
+        else {
             Err(InterpreterError::runtime_error(
-                crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string()),
+                crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string())
             ))
         }
     }
-    pub fn get_values(&self) -> &HashMap<String, Value> {
-        &self.values
-    }
+
+
+    // pub fn get(&mut self, name: &str) -> Option<Value> {
+    //     // Check cache first
+    //     if let Some((depth, value)) = self.cache.get(name) {
+    //         if *depth == self.depth {
+    //             return Some(value.clone());
+    //         }
+    //     }
+
+    //     // Look in current scope
+    //     if let Some(value) = self.values.get(name) {
+    //         // Cache the result
+    //         self.cache.insert(name.to_string(), (self.depth, value.clone()));
+    //         return Some(value.clone());
+    //     }
+
+    //     // Look in enclosing scope
+    //     if let Some(enclosing) = &self.enclosing {
+    //         let mut enc = enclosing.borrow_mut();
+    //         let value = enc.get(name);
+    //         if let Some(ref val) = value {
+    //             // Cache the result from parent scope
+    //             self.cache.insert(name.to_string(), (self.depth, val.clone()));
+    //         }
+    //         value
+    //     } else {
+    //         None
+    //     }
+    // }
+
+    
     pub fn resolve_module_path(&self, import_path: &str) -> InterpreterResult<PathBuf> {
         let path = Path::new(import_path);
         
@@ -590,23 +512,24 @@ impl Environment {
 
     pub fn get_from_module(&self, var_name: &str) -> Option<Value> {
         for module in self.modules.values() {
-            if let Some(value) = module.environment.values.get(var_name) {
+            if let Some(value) = module.environment.lock().unwrap().get(var_name) {
                 return Some(value.clone());
             }
         }
         None
     }
 
-    pub fn assign(&mut self, name: &str, value: Value) -> InterpreterResult<Value> {
-        if self.values.contains_key(name) {
-            self.values.insert(name.to_string(), value.clone());
-            Ok(value)
-        } else if let Some(enclosing) = &mut self.enclosing {
-            enclosing.assign(name, value)
-        } else {
-            Err(InterpreterError::runtime_error(
-                crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string()),
-            ))
-        }
-    }
+    // pub fn assign(&mut self, name: &str, value: Value) -> InterpreterResult<Value> {
+    //     if self.values.contains_key(name) {
+    //         self.values.insert(name.to_string(), value.clone());
+    //         Ok(value)
+    //     } else if let Some(enclosing) = &mut self.enclosing {
+    //         let mut enc = enclosing.borrow_mut();
+    //         enc.assign(name, value)
+    //     } else {
+    //         Err(InterpreterError::runtime_error(
+    //             crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string()),
+    //         ))
+    //     }
+    // }
 }

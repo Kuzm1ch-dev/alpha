@@ -1,1 +1,8 @@
-import "hashmap.alpha";
+fun add(a,b){
+    return a+b;
+}
+
+var i = 1;
+var j = 12;
+var c = add(i,j);
+print(c);

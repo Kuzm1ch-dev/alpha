@@ -11,6 +11,7 @@ pub enum TokenType {
     LEFT_BRACKET,
     RIGHT_BRACKET,
     COLON,
+    MODULO,
     COMMA,
     DICT,
     DOT,
@@ -145,6 +146,12 @@ impl Tokenizer {
                 '-' => self.add_token(Token {
                     token_type: TokenType::MINUS,
                     lexeme: "-".to_string(),
+                    literal: None,
+                    line: self.line,
+                }),
+                '%' => self.add_token(Token {
+                    token_type: TokenType::MODULO,
+                    lexeme: "%".to_string(),
                     literal: None,
                     line: self.line,
                 }),

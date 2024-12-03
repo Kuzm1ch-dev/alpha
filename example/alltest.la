@@ -61,6 +61,13 @@ fun testArrays() {
     print("Modified array: " + arr); // Should show updated value
 }
 
+fun testNativeFunction(){
+    var rand = random();
+    var time = clock();
+    print("random: " + rand);
+    print("clock: " + clock);
+}
+
 fun testDictionary() {
     print("Dictionary Test:");
     var dic = dict {
@@ -108,6 +115,7 @@ fun testScope() {
 // Run all tests
 fun runAllTests() {
     print("=== Starting Tests ===");
+    var start = clock();
     testArithmetic();
     testFunctions();
     testConditionals();
@@ -115,8 +123,12 @@ fun runAllTests() {
     testArrays();
     testErrorHandling();
     testNestedFunctions();
+    testNativeFunction();
     testScope();
     testDictionary();
+    var end = clock();
+    var delta = end - start;
+    print("duration: " + delta);
     print("=== Tests Complete ===");
 }
 

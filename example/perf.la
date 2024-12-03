@@ -1,0 +1,14 @@
+fun fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// Run benchmarks
+print("Starting benchmarks...");
+var count = 9;
+var start = clock();
+var fib_result = fibonacci(count);
+var fib_time = clock() - start;
+print("Alpha Fibonacci("+count+"): " + toString(fib_result) + ", Time: " + toString(fib_time) + " seconds");
