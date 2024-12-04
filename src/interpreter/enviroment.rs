@@ -28,7 +28,6 @@ pub struct Environment {
     modules: FxHashMap<String, Module>,
     pub depth: usize,
     // Cache frequently accessed values
-    cache: FxHashMap<String, (usize, Value)>,
     pub base_path: PathBuf,
 }
 
@@ -39,7 +38,6 @@ impl Environment {
             values: FxHashMap::default(),
             natives: FxHashMap::default(),
             modules: FxHashMap::default(),
-            cache: FxHashMap::default(),
             enclosing: None,
             depth: 0,
             base_path
@@ -180,7 +178,7 @@ impl Environment {
                 Value::String(s) => s.clone(),
                 Value::Boolean(b) => b.to_string(),
                 Value::Nil => "nil".to_string(),
-                Value::Function(name, _, _, _) => format!("<fn {}>", name),
+                Value::Function(name, _, _) => format!("<fn {}>", name),
                 Value::NativeFunction(nf) => format!("<native fn {}>", nf.name),
                 Value::Class(name, _) => format!("<class {}>", name),
                 Value::Instance(name, _) => format!("<instance {}>", name),
@@ -341,6 +339,30 @@ impl Environment {
         env
     }
 
+    pub fn new_with_enclosing(enclosing: Option<Arc<Mutex<Environment>>>) -> Arc<Mutex<Self>> {
+        let depth = enclosing.as_ref().map_or(0, |e| e.lock().unwrap().depth + 1);
+        Arc::new(Mutex::new(Self {
+            natives: FxHashMap::default(),
+            modules: FxHashMap::default(),
+            values: FxHashMap::default(),
+            enclosing,
+            depth,
+            base_path: PathBuf::from(".".to_string())
+        }))
+    }
+
+    pub fn new_empty() -> Self{
+        let mut env = Environment {
+            values: FxHashMap::default(),
+            natives: FxHashMap::default(),
+            modules: FxHashMap::default(),
+            enclosing: None,
+            depth: 0,
+            base_path: PathBuf::from(".".to_string())
+        };
+        env
+    }
+
     pub fn define_native(
         &mut self,
         name: &str,
@@ -353,20 +375,6 @@ impl Environment {
 
     pub fn define_class(&mut self, name: String, methods: HashMap<String, Value>) {
         self.values.insert(name.clone(), Value::Class(name, methods));
-    }
-
-
-    pub fn new_with_enclosing(enclosing: Option<Arc<Mutex<Environment>>>) -> Arc<Mutex<Self>> {
-        let depth = enclosing.as_ref().map_or(0, |e| e.lock().unwrap().depth + 1);
-        Arc::new(Mutex::new(Self {
-            natives: FxHashMap::default(),
-            modules: FxHashMap::default(),
-            values: FxHashMap::default(),
-            enclosing,
-            depth,
-            cache: FxHashMap::default(),
-            base_path: PathBuf::from(".".to_string())
-        }))
     }
 
     pub fn get_values(&self) -> FxHashMap<String, Value> {
@@ -386,7 +394,8 @@ impl Environment {
         } else if let Some(value) = self.natives.get(name) {
             Some(Value::NativeFunction(value.clone()))
         }else if let Some(enclosing) = &self.enclosing {
-            enclosing.lock().unwrap().get(name)
+            let enclosing_lock = enclosing.lock().unwrap();
+            enclosing_lock.get(name)
         } else {
             None
         }
@@ -406,37 +415,6 @@ impl Environment {
             ))
         }
     }
-
-
-    // pub fn get(&mut self, name: &str) -> Option<Value> {
-    //     // Check cache first
-    //     if let Some((depth, value)) = self.cache.get(name) {
-    //         if *depth == self.depth {
-    //             return Some(value.clone());
-    //         }
-    //     }
-
-    //     // Look in current scope
-    //     if let Some(value) = self.values.get(name) {
-    //         // Cache the result
-    //         self.cache.insert(name.to_string(), (self.depth, value.clone()));
-    //         return Some(value.clone());
-    //     }
-
-    //     // Look in enclosing scope
-    //     if let Some(enclosing) = &self.enclosing {
-    //         let mut enc = enclosing.borrow_mut();
-    //         let value = enc.get(name);
-    //         if let Some(ref val) = value {
-    //             // Cache the result from parent scope
-    //             self.cache.insert(name.to_string(), (self.depth, val.clone()));
-    //         }
-    //         value
-    //     } else {
-    //         None
-    //     }
-    // }
-
     
     pub fn resolve_module_path(&self, import_path: &str) -> InterpreterResult<PathBuf> {
         let path = Path::new(import_path);

@@ -1,14 +1,6 @@
-fun fibonacci(n) {
-    if (n <= 1) {
-        return n;
-    }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+fun fact(n){
+    if (n == 0) return 1;
+    return n * fact(n - 1)
 }
 
-// Run benchmarks
-print("Starting benchmarks...");
-var count = 12;
-var start = clock();
-var fib_result = fibonacci(count);
-var fib_time = clock() - start;
-print("Alpha Fibonacci("+count+"): " + toString(fib_result) + ", Time: " + toString(fib_time) + " seconds");
+print(fact(11));

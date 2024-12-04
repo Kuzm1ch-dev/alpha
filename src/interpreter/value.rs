@@ -10,7 +10,7 @@ pub enum Value {
     String(String),
     Boolean(bool),
     NativeFunction(NativeFunction),
-    Function(String, Vec<String>, Box<Expr>, Option<Arc<Mutex<Environment>>>),
+    Function(String, Vec<String>, Box<Expr>),
     Class(String, HashMap<String, Value>), // (class name, methods)
     Instance(String, Arc<Mutex<Environment>>), // (class name, fields)
     Array(Vec<Value>),
@@ -25,7 +25,7 @@ impl Value {
             Value::String(s) => s.clone(),
             Value::Boolean(b) => b.to_string(),
             Value::Nil => "nil".to_string(),
-            Value::Function(name, _, _, _) => name.clone(),
+            Value::Function(name, _, _) => name.clone(),
             Value::NativeFunction(nf) => nf.name.clone(),
             Value::Class(name, _) => name.clone(),
             Value::Instance(name, _) => name.clone(),
@@ -66,7 +66,7 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
-            Value::Function(name, _, _, _) => write!(f, "<fn {}>", name),
+            Value::Function(name, _, _) => write!(f, "<fn {}>", name),
             Value::NativeFunction(nf) => write!(f, "<native fn {}>", nf.name),
             Value::Class(name, _) => write!(f, "<class {}>", name),
             Value::Instance(name, values) => write!(f, "<instance {} {:#?}>", name, values),

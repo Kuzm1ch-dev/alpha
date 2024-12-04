@@ -8,7 +8,7 @@
             "program": "${workspaceFolder}/target/debug/codecrafters-interpreter.exe",
             "args": [
                 "run",
-                "text.la"
+                "./example/perf.la"
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "cargo build"

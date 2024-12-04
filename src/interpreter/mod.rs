@@ -3,6 +3,7 @@ use std::any::Any;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::{env, result};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -15,6 +16,7 @@ use crate::tokenizer::TokenType;
 pub mod enviroment;
 pub mod native;
 pub mod value;
+
 
 pub struct Interpreter {
     environment: Arc<Mutex<Environment>>,
@@ -39,7 +41,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, expressions: Vec<(Expr, usize)>) -> InterpreterResult<Value> {
         let mut last_value = Value::Nil;
-        // println!("expressions: {:#?}", expressions);
+        //println!("expressions: {:#?}", expressions);
         for (expr, line) in expressions {
             self.line = line;
             //println!("{:?}", expr);
@@ -274,8 +276,8 @@ impl Interpreter {
                 Ok(value)
             }
             Expr::Block(statements) => {
-                let environment =
-                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let mut environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                println!("execute_block");
                 self.execute_block(statements, environment)
             }
             Expr::Function(name, params, body) => {
@@ -283,7 +285,7 @@ impl Interpreter {
                     name.lexeme.clone(),
                     params.iter().map(|p| p.lexeme.clone()).collect(),
                     body.clone(),
-                    Some(Arc::clone(&self.environment)),
+                    // Some(environment),
                 );
                 self.environment
                     .lock()
@@ -397,7 +399,7 @@ impl Interpreter {
                                 name.lexeme.clone(),
                                 params.iter().map(|p| p.lexeme.clone()).collect(),
                                 body.clone(),
-                                self.environment.lock().unwrap().get_enclosing().clone(),
+                                // self.environment.lock().unwrap().get_enclosing().clone(),
                             );
                             class_methods.insert(name.lexeme.clone(), function);
                         }
@@ -428,39 +430,18 @@ impl Interpreter {
         self.environment = environment;
         let mut result = Value::Nil;
         for statement in statements {
-            // match self.evaluate(statement) {
-            //     Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
-            //         value,
-            //     ))) => {
-            //         result = value.clone();
-            //         break;
-            //     }
-            //     Err(e) => return Err(e),
-            //     Ok(_) => continue,
-            // }
-            match statement {
-                Expr::Return(_, expr) => {
-                    println!("ТУТ СОЗДАЕМ TAIL {:?}", expr);
+            match self.evaluate(statement) {
+                Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
+                    value,
+                ))) => {
+                    return Ok(value.clone());
                 }
-                _ => match self.evaluate(statement) {
-                    Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
-                        value,
-                    ))) => {
-                        result = value.clone();
-                        break;
-                    }
-                    Err(e) => return Err(e),
-                    Ok(_) => continue,
-                }
+                Err(e) => return Err(e),
+                Ok(value) => result = value.clone(),
             }
         }
         self.environment = previous;
-        match result {
-            Value::Nil => Ok(Value::Nil),
-            _ => Err(InterpreterError::runtime_error(
-                crate::error::RuntimeErrorKind::Return(result),
-            )),
-        }
+        Ok(result)
     }
 
     fn execute_call(
@@ -470,7 +451,7 @@ impl Interpreter {
         arguments: Vec<Value>,
     ) -> InterpreterResult<Value> {
         match callee {
-            Value::Function(name, params, body, closure_env) => {
+            Value::Function(name, params, body) => {
                 if arguments.len() != params.len() {
                     return Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::ExpextedArgument(
@@ -480,27 +461,24 @@ impl Interpreter {
                         ),
                     ));
                 }
-                let environment =
-                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                println!("execute_call {:?} depth: {}", name, self.environment.lock().unwrap().depth);
+                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let mut env_lock = environment.lock().unwrap();
                 for (param, arg) in params.iter().zip(arguments) {
-                    environment.lock().unwrap().define(param, arg);
+                    env_lock.define(param, arg);
                 }
-                if let Some(closure_env) = closure_env {
-                    for value in closure_env.lock().unwrap().get_values() {
-                        environment
-                            .lock()
-                            .unwrap()
-                            .define(&value.0, value.1.clone());
+                drop(env_lock);
+                println!("execute_block from call {:?}", name);
+                match *body {
+                    Expr::Block(statements) => {
+                        let result = self.execute_block(&statements, environment)?;
+                        Ok(result)
+                    }
+                    _ => {
+                        let result = self.evaluate(&body)?;
+                        Ok(result)
                     }
                 }
-                match self.execute_block(&[*body], environment) {
-                    Err(InterpreterError::RuntimeError(
-                        crate::error::RuntimeErrorKind::Return(value),
-                    )) => Ok(value),
-                    Err(e) => Err(e),
-                    Ok(_) => Ok(Value::Nil), // ... other cases ...
-                }
-                // self.execute_block(&[*body], environment);
             }
             Value::NativeFunction(function) => function.call(&arguments),
             Value::Class(name, methods) => {
@@ -508,7 +486,7 @@ impl Interpreter {
                     Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 if let Some(method) = methods.get("_construct") {
                     match method {
-                        Value::Function(_, params, body, _) => {
+                        Value::Function(_, params, body) => {
                             // Тут переделать environment
                             for (param, arg) in params.iter().zip(arguments) {
                                 environment.lock().unwrap().define(param, arg);

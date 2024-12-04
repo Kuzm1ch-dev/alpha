@@ -14,3 +14,7 @@ debug = true
 
 [profile.release]
 debug = true
+
+[target.'cfg(all(target_os = "windows"))']
+# (..)
+linker = "flip-link"
