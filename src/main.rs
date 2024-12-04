@@ -38,7 +38,7 @@ fn main() {
             Ok(exprs) => {
                 let mut interpreter = interpreter::Interpreter::new_with_base_path(base_dir);
                 match interpreter.interpret(exprs) {
-                    Ok(result) => {}
+                    Ok(_) => {}
                     Err(error) => {
                         eprintln!("{}", error);
                         std::process::exit(70);
@@ -51,6 +51,6 @@ fn main() {
             }
         }
     } else {
-        println!("EOF  null");
+        println!("Eof  null");
     }
 }

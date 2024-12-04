@@ -4,52 +4,52 @@ use crate::error::{InterpreterError, InterpreterResult};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    LEFT_BRACKET,
-    RIGHT_BRACKET,
-    COLON,
-    MODULO,
-    COMMA,
-    DICT,
-    DOT,
-    MINUS,
-    PLUS,
-    SEMICOLON,
-    SLASH,
-    STAR,
-    BANG,
-    BANG_EQUAL,
-    EQUAL,
-    EQUAL_EQUAL,
-    GREATER,
-    GREATER_EQUAL,
-    LESS,
-    LESS_EQUAL,
-    IDENTIFIER,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
+    Colon,
+    Modulo,
+    Comma,
+    Dict,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
+    Bang,
+    BandEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    IDENTIfIER,
     STRING,
-    NUMBER,
-    AND,
-    CLASS,
-    NEW,
-    ELSE,
-    FALSE,
-    FUN,
-    FOR,
-    IF,
-    NIL,
-    OR,
-    RETURN,
-    SUPER,
-    TRUE,
-    TRY,
-    CATCH,
-    VAR,
-    WHILE,
-    EOF,
-    IMPORT
+    Number,
+    And,
+    Class,
+    New,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Return,
+    Super,
+    True,
+    Try,
+    Catch,
+    Var,
+    While,
+    Eof,
+    Import
 }
 
 impl std::fmt::Display for TokenType {
@@ -85,90 +85,90 @@ impl Tokenizer {
         return self.tokens.clone();
     }
     pub fn tokenize(&mut self, input: &str) -> InterpreterResult<()> {
-        let mut chars: Vec<char> = input.chars().collect();
+        let chars: Vec<char> = input.chars().collect();
         while self.current < chars.len() {
             let c = chars[self.current];
             match c {
                 '(' => self.add_token(Token {
-                    token_type: TokenType::LEFT_PAREN,
+                    token_type: TokenType::LeftParen,
                     lexeme: "(".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 ')' => self.add_token(Token {
-                    token_type: TokenType::RIGHT_PAREN,
+                    token_type: TokenType::RightParen,
                     lexeme: ")".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '[' => self.add_token(Token {
-                    token_type: TokenType::LEFT_BRACKET,
+                    token_type: TokenType::LeftBracket,
                     lexeme: "[".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 ']' => self.add_token(Token {
-                    token_type: TokenType::RIGHT_BRACKET,
+                    token_type: TokenType::RightBracket,
                     lexeme: "]".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '{' => self.add_token(Token {
-                    token_type: TokenType::LEFT_BRACE,
+                    token_type: TokenType::LeftBrace,
                     lexeme: "{".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '}' => self.add_token(Token {
-                    token_type: TokenType::RIGHT_BRACE,
+                    token_type: TokenType::RightBrace,
                     lexeme: "}".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 ':' => self.add_token(Token {
-                    token_type: TokenType::COLON,
+                    token_type: TokenType::Colon,
                     lexeme: ":".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 ',' => self.add_token(Token {
-                    token_type: TokenType::COMMA,
+                    token_type: TokenType::Comma,
                     lexeme: ",".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '.' => self.add_token(Token {
-                    token_type: TokenType::DOT,
+                    token_type: TokenType::Dot,
                     lexeme: ".".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '-' => self.add_token(Token {
-                    token_type: TokenType::MINUS,
+                    token_type: TokenType::Minus,
                     lexeme: "-".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '%' => self.add_token(Token {
-                    token_type: TokenType::MODULO,
+                    token_type: TokenType::Modulo,
                     lexeme: "%".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '+' => self.add_token(Token {
-                    token_type: TokenType::PLUS,
+                    token_type: TokenType::Plus,
                     lexeme: "+".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 ';' => self.add_token(Token {
-                    token_type: TokenType::SEMICOLON,
+                    token_type: TokenType::Semicolon,
                     lexeme: ";".to_string(),
                     literal: None,
                     line: self.line,
                 }),
                 '*' => self.add_token(Token {
-                    token_type: TokenType::STAR,
+                    token_type: TokenType::Star,
                     lexeme: "*".to_string(),
                     literal: None,
                     line: self.line,
@@ -176,7 +176,7 @@ impl Tokenizer {
                 '!' => {
                     if self.peek_next(&chars) == '=' {
                         self.add_token(Token {
-                            token_type: TokenType::BANG_EQUAL,
+                            token_type: TokenType::BandEqual,
                             lexeme: "!=".to_string(),
                             literal: None,
                             line: self.line,
@@ -184,7 +184,7 @@ impl Tokenizer {
                         self.current += 1;
                     } else {
                         self.add_token(Token {
-                            token_type: TokenType::BANG,
+                            token_type: TokenType::Bang,
                             lexeme: "!".to_string(),
                             literal: None,
                             line: self.line,
@@ -194,7 +194,7 @@ impl Tokenizer {
                 '=' => {
                     if self.peek_next(&chars) == '=' {
                         self.add_token(Token {
-                            token_type: TokenType::EQUAL_EQUAL,
+                            token_type: TokenType::EqualEqual,
                             lexeme: "==".to_string(),
                             literal: None,
                             line: self.line,
@@ -202,7 +202,7 @@ impl Tokenizer {
                         self.current += 1;
                     } else {
                         self.add_token(Token {
-                            token_type: TokenType::EQUAL,
+                            token_type: TokenType::Equal,
                             lexeme: "=".to_string(),
                             literal: None,
                             line: self.line,
@@ -212,7 +212,7 @@ impl Tokenizer {
                 '<' => {
                     if self.peek_next(&chars) == '=' {
                         self.add_token(Token {
-                            token_type: TokenType::LESS_EQUAL,
+                            token_type: TokenType::LessEqual,
                             lexeme: "<=".to_string(),
                             literal: None,
                             line: self.line,
@@ -220,7 +220,7 @@ impl Tokenizer {
                         self.current += 1;
                     } else {
                         self.add_token(Token {
-                            token_type: TokenType::LESS,
+                            token_type: TokenType::Less,
                             lexeme: "<".to_string(),
                             literal: None,
                             line: self.line,
@@ -230,7 +230,7 @@ impl Tokenizer {
                 '>' => {
                     if self.peek_next(&chars) == '=' {
                         self.add_token(Token {
-                            token_type: TokenType::GREATER_EQUAL,
+                            token_type: TokenType::GreaterEqual,
                             lexeme: ">=".to_string(),
                             literal: None,
                             line: self.line,
@@ -238,7 +238,7 @@ impl Tokenizer {
                         self.current += 1;
                     } else {
                         self.add_token(Token {
-                            token_type: TokenType::GREATER,
+                            token_type: TokenType::Greater,
                             lexeme: ">".to_string(),
                             literal: None,
                             line: self.line,
@@ -253,7 +253,7 @@ impl Tokenizer {
                         self.line += 1;
                     } else {
                         self.add_token(Token {
-                            token_type: TokenType::SLASH,
+                            token_type: TokenType::Slash,
                             lexeme: "/".to_string(),
                             literal: None,
                             line: self.line,
@@ -289,7 +289,7 @@ impl Tokenizer {
         }
 
         self.tokens.push(Token {
-            token_type: TokenType::EOF,
+            token_type: TokenType::Eof,
             lexeme: "".to_string(),
             literal: None,
             line: self.line,
@@ -356,7 +356,7 @@ impl Tokenizer {
         }
         let left = chars[start..fractional_start].iter().collect::<String>();
         let mut right = "".to_string();
-        if (fractional_length > 0){
+        if fractional_length > 0 {
             right = chars[fractional_start+1..fractional_start+fractional_length+1].iter().collect::<String>();
             while right.ends_with('0') {
                 right.pop();
@@ -370,7 +370,7 @@ impl Tokenizer {
         value.push_str(&right);
         let lexeme = chars[start..self.current].iter().collect::<String>();
         self.tokens.push(Token {
-            token_type: TokenType::NUMBER,
+            token_type: TokenType::Number,
             lexeme,
             literal: Some(value),
             line: self.line,
@@ -387,26 +387,26 @@ impl Tokenizer {
         }
         let value = chars[start..self.current].iter().collect::<String>();
         let token_type = match value.as_str() {
-            "and" => TokenType::AND,
-            "class" => TokenType::CLASS,
-            "new" => TokenType::NEW,
-            "else" => TokenType::ELSE,
-            "false" => TokenType::FALSE,
-            "for" => TokenType::FOR,
-            "fun" => TokenType::FUN,
-            "dict" => TokenType::DICT,
-            "if" => TokenType::IF,
-            "nil" => TokenType::NIL,
-            "or" => TokenType::OR,
-            "return" => TokenType::RETURN,
-            "try" => TokenType::TRY,
-            "catch" => TokenType::CATCH,
-            "super" => TokenType::SUPER,
-            "true" => TokenType::TRUE,
-            "var" => TokenType::VAR,
-            "while" => TokenType::WHILE,
-            "import" => TokenType::IMPORT,
-            _ => TokenType::IDENTIFIER,
+            "and" => TokenType::And,
+            "class" => TokenType::Class,
+            "new" => TokenType::New,
+            "else" => TokenType::Else,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "fun" => TokenType::Fun,
+            "dict" => TokenType::Dict,
+            "if" => TokenType::If,
+            "nil" => TokenType::Nil,
+            "or" => TokenType::Or,
+            "return" => TokenType::Return,
+            "try" => TokenType::Try,
+            "catch" => TokenType::Catch,
+            "super" => TokenType::Super,
+            "true" => TokenType::True,
+            "var" => TokenType::Var,
+            "while" => TokenType::While,
+            "import" => TokenType::Import,
+            _ => TokenType::IDENTIfIER,
         };
         self.tokens.push(Token {
             token_type,

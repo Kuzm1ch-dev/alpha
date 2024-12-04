@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc, sync::{Arc, Mutex}};
+use std::{collections::HashMap, fmt, sync::{Arc, Mutex}};
 
 use crate::parser::Expr;
 

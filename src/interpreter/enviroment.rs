@@ -1,10 +1,10 @@
-use std::{cell::RefCell, collections::{btree_map::Values, HashMap}, fmt, io::Write, path::{Path, PathBuf}, rc::Rc, sync::{Arc, Mutex}};
+use std::{collections::HashMap, io::Write, path::{Path, PathBuf}, sync::{Arc, Mutex}};
 
 use rustc_hash::FxHashMap;
 
 use crate::{
     error::{InterpreterError, InterpreterResult},
-    parser::{Expr, Parser}, tokenizer::Tokenizer,
+    parser::Parser, tokenizer::Tokenizer,
 };
 
 use super::{native::NativeFunction, value::Value, Interpreter};
@@ -30,7 +30,6 @@ pub struct Environment {
     // Cache frequently accessed values
     pub base_path: PathBuf,
 }
-
 
 impl Environment {
     pub fn new(base_path: PathBuf) -> Self {
@@ -352,7 +351,7 @@ impl Environment {
     }
 
     pub fn new_empty() -> Self{
-        let mut env = Environment {
+        let env = Environment {
             values: FxHashMap::default(),
             natives: FxHashMap::default(),
             modules: FxHashMap::default(),
@@ -496,18 +495,4 @@ impl Environment {
         }
         None
     }
-
-    // pub fn assign(&mut self, name: &str, value: Value) -> InterpreterResult<Value> {
-    //     if self.values.contains_key(name) {
-    //         self.values.insert(name.to_string(), value.clone());
-    //         Ok(value)
-    //     } else if let Some(enclosing) = &mut self.enclosing {
-    //         let mut enc = enclosing.borrow_mut();
-    //         enc.assign(name, value)
-    //     } else {
-    //         Err(InterpreterError::runtime_error(
-    //             crate::error::RuntimeErrorKind::UndefinedVariable(0, name.to_string()),
-    //         ))
-    //     }
-    // }
 }

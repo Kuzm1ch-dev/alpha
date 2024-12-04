@@ -1,14 +1,8 @@
 use enviroment::Environment;
-use std::any::Any;
-use std::borrow::BorrowMut;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::{env, result};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
-use value::{Value};
+use value::Value;
 
 use crate::error::{InterpreterError, InterpreterResult};
 use crate::parser::{Expr, TryCatch};
@@ -60,11 +54,11 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &Expr) -> InterpreterResult<Value> {
         match expr {
             Expr::Literal(token, value) => match token.token_type {
-                TokenType::NUMBER => Ok(Value::Number(value.parse().unwrap())),
+                TokenType::Number => Ok(Value::Number(value.parse().unwrap())),
                 TokenType::STRING => Ok(Value::String(value.clone())),
-                TokenType::TRUE => Ok(Value::Boolean(true)),
-                TokenType::FALSE => Ok(Value::Boolean(false)),
-                TokenType::NIL => Ok(Value::Nil),
+                TokenType::True => Ok(Value::Boolean(true)),
+                TokenType::False => Ok(Value::Boolean(false)),
+                TokenType::Nil => Ok(Value::Nil),
                 _ => Err(InterpreterError::runtime_error(
                     crate::error::RuntimeErrorKind::InvalidLiteral(token.line),
                 )),
@@ -110,17 +104,17 @@ impl Interpreter {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
                 match operator.token_type {
-                    TokenType::PLUS => self.add(left, right),
-                    TokenType::MINUS => self.subtract(left, right),
-                    TokenType::STAR => self.multiply(left, right),
-                    TokenType::MODULO => self.modulo(left, right),
-                    TokenType::SLASH => self.divide(left, right),
-                    TokenType::GREATER => self.greater(left, right),
-                    TokenType::GREATER_EQUAL => self.greater_equal(left, right),
-                    TokenType::LESS => self.less(left, right),
-                    TokenType::LESS_EQUAL => self.less_equal(left, right),
-                    TokenType::EQUAL_EQUAL => self.equal(left, right),
-                    TokenType::BANG_EQUAL => self.not_equal(left, right),
+                    TokenType::Plus => self.add(left, right),
+                    TokenType::Minus => self.subtract(left, right),
+                    TokenType::Star => self.multiply(left, right),
+                    TokenType::Modulo => self.modulo(left, right),
+                    TokenType::Slash => self.divide(left, right),
+                    TokenType::Greater => self.greater(left, right),
+                    TokenType::GreaterEqual => self.greater_equal(left, right),
+                    TokenType::Less => self.less(left, right),
+                    TokenType::LessEqual => self.less_equal(left, right),
+                    TokenType::EqualEqual => self.equal(left, right),
+                    TokenType::BandEqual => self.not_equal(left, right),
                     _ => Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::InvalidBinaryOperator(operator.line),
                     )),
@@ -130,8 +124,8 @@ impl Interpreter {
                 let right = self.evaluate(expr)?;
 
                 match operator.token_type {
-                    TokenType::MINUS => self.negate(right),
-                    TokenType::BANG => self.not(right),
+                    TokenType::Minus => self.negate(right),
+                    TokenType::Bang => self.not(right),
                     _ => Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::InvalidUnaryOperator(operator.line),
                     )),
@@ -163,7 +157,7 @@ impl Interpreter {
                 let value = self.evaluate(value)?;
                 let name = self.evaluate(name)?;
                 match object {
-                    Value::Instance(class, mut env) => match name {
+                    Value::Instance(_, _) => match name {
                         Value::String(name) => {
                             self.environment
                                 .lock()
@@ -225,7 +219,7 @@ impl Interpreter {
                 let object = self.evaluate(object)?;
                 let name = self.evaluate(name)?;
                 match object {
-                    Value::Instance(_, env) => match name {
+                    Value::Instance(_, _) => match name {
                         Value::String(name) => {
                             self.environment.lock().unwrap().get(&name).ok_or_else(|| {
                                 InterpreterError::runtime_error(
@@ -276,7 +270,7 @@ impl Interpreter {
                 Ok(value)
             }
             Expr::Block(statements) => {
-                let mut environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 println!("execute_block");
                 self.execute_block(statements, environment)
             }
@@ -323,15 +317,15 @@ impl Interpreter {
                 match self.is_truthy(&condition) {
                     true => self.evaluate(then_branch),
                     false => self.evaluate(else_branch),
-                    _ => Err(InterpreterError::runtime_error(
-                        crate::error::RuntimeErrorKind::InvalidCondition(self.line),
-                    )),
+                    // _ => Err(InterpreterError::runtime_error(
+                    //     crate::error::RuntimeErrorKind::InvalidCondition(self.line),
+                    // )),
                 }
             }
             Expr::Logical(left, operator, right) => {
                 let left_val = self.evaluate(left)?;
                 match operator.token_type {
-                    TokenType::OR => {
+                    TokenType::Or => {
                         // If left is truthy, return immediately without evaluating right
                         if self.is_truthy(&left_val) {
                             return Ok(left_val);
@@ -339,7 +333,7 @@ impl Interpreter {
                         // Only evaluate right if left is falsy
                         self.evaluate(right)
                     }
-                    TokenType::AND => {
+                    TokenType::And => {
                         // If left is falsy, return immediately without evaluating right
                         if !self.is_truthy(&left_val) {
                             return Ok(left_val);
@@ -446,7 +440,7 @@ impl Interpreter {
 
     fn execute_call(
         &mut self,
-        owner: Option<Value>,
+        _owner: Option<Value>,
         callee: Value,
         arguments: Vec<Value>,
     ) -> InterpreterResult<Value> {
@@ -462,6 +456,9 @@ impl Interpreter {
                     ));
                 }
                 println!("execute_call {:?} depth: {}", name, self.environment.lock().unwrap().depth);
+                // if (self.environment.lock().unwrap().depth == 11){
+                //     println!("{:#?}", self.environment);
+                // }
                 let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 let mut env_lock = environment.lock().unwrap();
                 for (param, arg) in params.iter().zip(arguments) {
@@ -482,7 +479,7 @@ impl Interpreter {
             }
             Value::NativeFunction(function) => function.call(&arguments),
             Value::Class(name, methods) => {
-                let mut environment =
+                let environment =
                     Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 if let Some(method) = methods.get("_construct") {
                     match method {
@@ -530,7 +527,7 @@ impl Interpreter {
             }
             Err(error) => {
                 // Error occurred, execute catch block
-                let mut catch_env =
+                let catch_env =
                     Environment::new_with_enclosing(Some(Arc::clone(&previous_env)));
                 // Bind error to the catch parameter
                 catch_env
@@ -553,9 +550,9 @@ impl Interpreter {
             (Value::Number(a), Value::Number(b)) => Ok(Value::Number(a + b)),
             (Value::String(a), Value::String(b)) => Ok(Value::String(a + &b)),
             (a, b) => Ok(Value::String(a.to_string() + &b.to_string())),
-            _ => Err(InterpreterError::runtime_error(
-                crate::error::RuntimeErrorKind::OperandsMustBeNumbersOrStrings(self.line),
-            )),
+            // _ => Err(InterpreterError::runtime_error(
+            //     crate::error::RuntimeErrorKind::OperandsMustBeNumbersOrStrings(self.line),
+            // )),
         }
     }
 
@@ -681,7 +678,7 @@ impl Interpreter {
         match value {
             Value::Nil => false,
             Value::Boolean(b) => *b,
-            Value::String(s) => true,
+            Value::String(_) => true,
             Value::Number(n) => *n != 0.0,
             _ => true,
         }

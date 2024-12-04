@@ -1,21 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::{interpreter::value::Value, tokenizer::{Token, TokenType}};
-#[derive(Debug)]
-pub struct InterpreterKind {
-    message: String,
-    line: usize,
-}
-
-impl InterpreterKind {
-    pub fn new(message: String, line: usize) -> Self {
-        InterpreterKind {
-            message,
-            line,
-        }
-    }
-}
+use crate::{interpreter::value::Value, tokenizer::TokenType};
 #[derive(Debug)]
 pub enum TokenizerErrorKind {
     UnexpectedCharacter(char, usize),
@@ -60,7 +46,7 @@ pub enum ParserErrorKind {
     InvalidStatement(usize),
     UnknownError(usize),
     ExpectedUnary(usize),
-    UnexpectedEOF(usize),
+    UnexpectedEof(usize),
     InvalidImport(usize),
     ExpectExpression(String,usize)
 }
@@ -91,7 +77,7 @@ impl fmt::Display for ParserErrorKind {
             ParserErrorKind::ExpectedUnary(line) => {
                 write!(f, "[line {}] Error: Expected unary operator.", line)
             }
-            ParserErrorKind::UnexpectedEOF(line) => {
+            ParserErrorKind::UnexpectedEof(line) => {
                 write!(f, "[line {}] Error: Unexpected end of file.", line)
             }
             ParserErrorKind::ExpectExpression(ch,line) => {
