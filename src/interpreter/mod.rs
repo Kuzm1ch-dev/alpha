@@ -2,15 +2,15 @@ use enviroment::Environment;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use value::Value;
+use value::{PromiseState, Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
 use crate::parser::{Expr, TryCatch};
 use crate::tokenizer::TokenType;
 pub mod enviroment;
 pub mod native;
+pub mod native_functions;
 pub mod value;
-
 
 pub struct Interpreter {
     environment: Arc<Mutex<Environment>>,
@@ -20,8 +20,10 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         let path = PathBuf::new();
+        let env = Arc::new(Mutex::new(Environment::new(path)));
+        env.lock().unwrap().register_native_functions();
         Interpreter {
-            environment: Arc::new(Mutex::new(Environment::new(path))),
+            environment: env,
             line: 0,
         }
     }
@@ -270,8 +272,8 @@ impl Interpreter {
                 Ok(value)
             }
             Expr::Block(statements) => {
-                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
-                println!("execute_block");
+                let environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 self.execute_block(statements, environment)
             }
             Expr::Function(name, params, body) => {
@@ -280,6 +282,18 @@ impl Interpreter {
                     params.iter().map(|p| p.lexeme.clone()).collect(),
                     body.clone(),
                     // Some(environment),
+                );
+                self.environment
+                    .lock()
+                    .unwrap()
+                    .define(&name.lexeme, function.clone());
+                Ok(function)
+            }
+            Expr::AsyncFunction(name, params, body) => {
+                let function = Value::AsyncFunction(
+                    name.lexeme.clone(),
+                    params.iter().map(|p| p.lexeme.clone()).collect(),
+                    body.clone(),
                 );
                 self.environment
                     .lock()
@@ -310,6 +324,29 @@ impl Interpreter {
                     self.execute_call(None, callee, evaluated_args)
                 }
             }
+            Expr::AsyncCall(owner, callee, arguments) => {
+                let mut evaluated_args = Vec::new();
+                for arg in arguments {
+                    evaluated_args.push(self.evaluate(arg)?);
+                }
+                if let Some(owner) = owner {
+                    let owner = self.evaluate(owner)?;
+                    if let Value::Instance(_, env) = owner.clone() {
+                        let previous = self.environment.clone();
+                        self.environment = env;
+                        let callee = self.evaluate(callee)?;
+                        let result = self.execute_async_call(Some(owner), callee, evaluated_args);
+                        self.environment = previous;
+                        return result;
+                    }
+                    Err(InterpreterError::runtime_error(
+                        crate::error::RuntimeErrorKind::InvalidCall(0),
+                    ))
+                } else {
+                    let callee = self.evaluate(callee)?;
+                    self.execute_async_call(None, callee, evaluated_args)
+                }
+            },
             Expr::Grouping(expr) => self.evaluate(expr),
             Expr::Nil => Ok(Value::Nil),
             Expr::If(condition, then_branch, else_branch) => {
@@ -438,6 +475,29 @@ impl Interpreter {
         Ok(result)
     }
 
+    async fn execute_async_block(
+        &mut self,
+        statements: &[Expr],
+        environment: Arc<Mutex<Environment>>,
+    ) -> InterpreterResult<Value> {
+        let previous = self.environment.clone();
+        self.environment = environment;
+        let mut result = Value::Nil;
+        for statement in statements {
+            match self.evaluate(statement) {
+                Err(InterpreterError::RuntimeError(crate::error::RuntimeErrorKind::Return(
+                    value,
+                ))) => {
+                    return Ok(value.clone());
+                }
+                Err(e) => return Err(e),
+                Ok(value) => result = value.clone(),
+            }
+        }
+        self.environment = previous;
+        Ok(result)
+    }
+
     fn execute_call(
         &mut self,
         _owner: Option<Value>,
@@ -455,17 +515,13 @@ impl Interpreter {
                         ),
                     ));
                 }
-                println!("execute_call {:?} depth: {}", name, self.environment.lock().unwrap().depth);
-                // if (self.environment.lock().unwrap().depth == 11){
-                //     println!("{:#?}", self.environment);
-                // }
-                let environment = Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                 let mut env_lock = environment.lock().unwrap();
                 for (param, arg) in params.iter().zip(arguments) {
                     env_lock.define(param, arg);
                 }
                 drop(env_lock);
-                println!("execute_block from call {:?}", name);
                 match *body {
                     Expr::Block(statements) => {
                         let result = self.execute_block(&statements, environment)?;
@@ -512,6 +568,46 @@ impl Interpreter {
             )),
         }
     }
+    
+    async fn execute_async_call(
+        &mut self,
+        _owner: Option<Value>,
+        callee: Value,
+        arguments: Vec<Value>,) -> InterpreterResult<Value>{
+            match callee{
+                Value::AsyncFunction(name, params,body) => {
+                    if arguments.len() != params.len() {
+                        return Err(InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::ExpextedArgument(
+                                self.line,
+                                arguments.len(),
+                                params.len(),
+                            ),
+                        ));
+                    }
+                    let environment =
+                        Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                    let mut env_lock = environment.lock().unwrap();
+                    for (param, arg) in params.iter().zip(arguments) {
+                        env_lock.define(param, arg);
+                    }
+                    drop(env_lock);
+                    match *body {
+                        Expr::Block(statements) => {
+                            let result = self.execute_block(&statements, environment)?;
+                            Ok(result)
+                        }
+                        _ => {
+                            let result = self.evaluate(&body)?;
+                            Ok(result)
+                        }
+                    }
+                }
+                _ => Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::UndefinedFunction(self.line),
+                )),
+            }
+    }
     fn execute_try_catch(&mut self, try_catch: &TryCatch) -> InterpreterResult<Value> {
         // Create new environment for catch block scope
         let previous_env = self.environment.clone();
@@ -527,8 +623,7 @@ impl Interpreter {
             }
             Err(error) => {
                 // Error occurred, execute catch block
-                let catch_env =
-                    Environment::new_with_enclosing(Some(Arc::clone(&previous_env)));
+                let catch_env = Environment::new_with_enclosing(Some(Arc::clone(&previous_env)));
                 // Bind error to the catch parameter
                 catch_env
                     .lock()

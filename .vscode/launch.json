@@ -5,9 +5,8 @@
             "name": "Debug",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/codecrafters-interpreter.exe",
+            "program": "${workspaceFolder}/target/debug/alpha.exe",
             "args": [
-                "run",
                 "./example/perf.la"
             ],
             "cwd": "${workspaceFolder}",
@@ -17,11 +16,11 @@
             "name": "Release",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/target/release/codecrafters-interpreter.exe",
+            "program": "${workspaceFolder}/target/release/alpha.exe",
             "args": [
             ],
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "cargo build release"
+            "preLaunchTask": "cargo build --release"
         }
     ]
 }

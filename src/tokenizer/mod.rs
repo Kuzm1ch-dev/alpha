@@ -49,7 +49,9 @@ pub enum TokenType {
     Var,
     While,
     Eof,
-    Import
+    Import,
+    Async,
+    Await
 }
 
 impl std::fmt::Display for TokenType {
@@ -406,6 +408,8 @@ impl Tokenizer {
             "var" => TokenType::Var,
             "while" => TokenType::While,
             "import" => TokenType::Import,
+            "async" => TokenType::Async,
+            "await" => TokenType::Await,
             _ => TokenType::IDENTIfIER,
         };
         self.tokens.push(Token {

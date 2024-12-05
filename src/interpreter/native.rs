@@ -2,7 +2,7 @@ use crate::error::{InterpreterError, InterpreterResult};
 
 use super::value::Value;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NativeFunction {
     pub name: String,
     arity: usize,

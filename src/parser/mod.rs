@@ -25,8 +25,10 @@ pub enum Expr {
     Let(Token, Box<Expr>),                  // For variable declaration
     Block(Vec<Expr>),                       // For block of expressions
     Function(Token, Vec<Token>, Box<Expr>), // Function declaration
+    AsyncFunction(Token, Vec<Token>, Box<Expr>), // Function declaration
     Class(Token, Vec<Expr>),                // Class declaration
     Call(Option<Box<Expr>>, Box<Expr>, Vec<Expr>),      // Function call (owner, func, args)
+    AsyncCall(Option<Box<Expr>>, Box<Expr>, Vec<Expr>), // Async function call (owner, func, args
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     While(Box<Expr>, Box<Expr>),
     For(Box<Expr>, Box<Expr>, Box<Expr>, Box<Expr>),
@@ -319,9 +321,20 @@ impl Parser {
                 Err(e) => return Err(e),
             }
         }
-        // Придумать как отделить вызов функций класса, геттеры и сеттеры
         if self.match_tokens(vec![TokenType::New]) {
             match self.class_instantiation() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),
+            }
+        }
+        if self.match_tokens(vec![TokenType::Async]){
+            match self.async_function_declaration() {
+                Ok(expr) => return Ok(expr),
+                Err(e) => return Err(e),
+            }
+        }
+        if self.match_tokens(vec![TokenType::Await]){
+            match self.async_call() {
                 Ok(expr) => return Ok(expr),
                 Err(e) => return Err(e),
             }
@@ -564,6 +577,59 @@ impl Parser {
             ))
         }
     }
+
+    fn async_call(&mut self) -> InterpreterResult<Expr> {
+        let mut expr: Expr = Expr::Variable(self.previous());
+        // Now handle the arguments if there are parentheses
+        if self.match_tokens(vec![TokenType::Dot]){
+            let fun_name = self.consume(TokenType::IDENTIfIER)?;
+            let fun = Expr::Variable(fun_name);
+            while self.match_tokens(vec![TokenType::LeftParen]) {
+                let arguments = self.arguments()?;
+                self.consume(TokenType::RightParen)?;
+                expr = Expr::AsyncCall(Some(Box::new(expr)),Box::new(fun), arguments);
+                println!("class call: {:?}", expr);
+                return Ok(expr);
+            }
+        }
+        while self.match_tokens(vec![TokenType::LeftParen]) {
+            let arguments = self.arguments()?;
+            self.consume(TokenType::RightParen)?;
+            expr = Expr::AsyncCall(None,Box::new(expr), arguments);
+        }
+        if matches!(expr, Expr::Call(..)) {
+            Ok(expr)
+        } else {
+            Err(InterpreterError::parser_error(
+                crate::error::ParserErrorKind::ExpectExpression(self.previous().lexeme, self.peek().line),
+            ))
+        }
+    }
+    fn async_function_declaration(&mut self) -> InterpreterResult<Expr> {
+        let name: Token = self.consume(TokenType::IDENTIfIER)?;
+        self.consume(TokenType::LeftParen)?;
+        let mut parameters = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 255 {
+                    return Err(InterpreterError::parser_error(
+                        crate::error::ParserErrorKind::InvalidParametsCount(self.previous().line),
+                    ));
+                }
+                parameters.push(self.consume(TokenType::IDENTIfIER)?);
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen)?;
+
+        self.consume(TokenType::LeftBrace)?;
+        let body = self.block()?;
+
+        Ok(Expr::AsyncFunction(name, parameters, Box::new(body)))
+    }
+
     fn function_declaration(&mut self) -> InterpreterResult<Expr> {
         let name: Token = self.consume(TokenType::IDENTIfIER)?;
         self.consume(TokenType::LeftParen)?;

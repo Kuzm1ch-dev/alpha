@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 use crate::{interpreter::value::Value, tokenizer::TokenType};
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenizerErrorKind {
     UnexpectedCharacter(char, usize),
     UnterminatedString(usize),
@@ -36,7 +36,7 @@ impl fmt::Display for TokenizerErrorKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParserErrorKind {
     ExpectedSemilicon(usize),
     UnexpectedToken(usize, TokenType),
@@ -89,7 +89,7 @@ impl fmt::Display for ParserErrorKind {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RuntimeErrorKind {
     InvalidTailCall(usize),
     InvalidNumber(usize),
@@ -114,8 +114,10 @@ pub enum RuntimeErrorKind {
     InvalidImport(usize, String),
     InvalidClassMethod(usize),
     InvalidDictionaryKey(usize),
+    AssertionFailed,
     InvalidSet(usize),
     InvalidGet(usize),
+    NetworkError(usize),
     IoError(String),
     InvalidCall(usize),
     Return(Value),
@@ -207,18 +209,24 @@ impl fmt::Display for RuntimeErrorKind {
             RuntimeErrorKind::InvalidTailCall(line) => {
                 write!(f, "[line {}] Error: Invalid Tail Call.", line)
             }
+            RuntimeErrorKind::AssertionFailed => {
+                write!(f, "Assertion failed.")
+            }
+            RuntimeErrorKind::NetworkError(line) => {
+                write!(f, "[line {}] Error: Network error.", line)
+            }
         }
     }
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnknownErrorKind {
     UnknownError,
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InterpreterError {
     TokenizerError(TokenizerErrorKind),
     ParserError(ParserErrorKind),
