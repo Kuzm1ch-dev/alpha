@@ -191,7 +191,7 @@ impl Environment {
                 }
                 Value::Socket(_) => "socket".to_string(),
                 Value::Server(_) => "server".to_string(),
-                Value::AsyncFunction(name, _) => format!("<async fn {}>", name),
+                Value::AsyncFunction(name, _, _) => format!("<async fn {}>", name),
                 Value::Promise(_) => "promise".to_string(),
                 // Add other value types as needed
             };
@@ -232,16 +232,18 @@ impl Environment {
         });
     }
     fn register_async_functions(&mut self){
-        // self.define_async_native("delay", 1, |args| async move {
-        //     match &args[0] {
-        //         Value::Number(seconds) => {
-        //             sleep(Duration::from_secs_f64(*seconds)).await;
-        //             Ok(Value::Nil)
-        //         }
-        //         _ => Err(InterpreterError::runtime_error(
-        //             RuntimeErrorKind::InvalidArgumentType(0),
-        //         )),
-        //     }
-        // });
+        self.define_native("delay", 1, |args| {
+            let duration = match args[0] {
+                Value::Number(n) => Duration::from_secs_f64(n),
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let future = tokio::spawn(async move {
+                sleep(duration).await;
+                Ok(Value::Nil)
+            });
+            Ok(Value::create_promise(future))
+        });
     }
 }

@@ -9,7 +9,8 @@ pub mod parser;
 use parser::Parser;
 pub mod error;
 pub mod interpreter;
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 1 {
         writeln!(io::stderr(), "Usage: {} alpha <filename>", args[0]).unwrap();

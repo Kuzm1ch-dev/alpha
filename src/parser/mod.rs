@@ -579,7 +579,7 @@ impl Parser {
     }
 
     fn async_call(&mut self) -> InterpreterResult<Expr> {
-        let mut expr: Expr = Expr::Variable(self.previous());
+        let mut expr: Expr = Expr::Variable(self.advance());
         // Now handle the arguments if there are parentheses
         if self.match_tokens(vec![TokenType::Dot]){
             let fun_name = self.consume(TokenType::IDENTIfIER)?;
@@ -597,7 +597,7 @@ impl Parser {
             self.consume(TokenType::RightParen)?;
             expr = Expr::AsyncCall(None,Box::new(expr), arguments);
         }
-        if matches!(expr, Expr::Call(..)) {
+        if matches!(expr, Expr::AsyncCall(..)) {
             Ok(expr)
         } else {
             Err(InterpreterError::parser_error(
@@ -606,6 +606,7 @@ impl Parser {
         }
     }
     fn async_function_declaration(&mut self) -> InterpreterResult<Expr> {
+        self.consume(TokenType::Fun)?;
         let name: Token = self.consume(TokenType::IDENTIfIER)?;
         self.consume(TokenType::LeftParen)?;
         let mut parameters = Vec::new();

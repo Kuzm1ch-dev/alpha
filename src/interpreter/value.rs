@@ -1,5 +1,5 @@
 use std::{collections::HashMap, fmt::{self, Debug}, future::Future, pin::Pin, sync::{Arc, Mutex}};
-use tokio::net::{TcpStream,TcpListener};
+use tokio::{net::{TcpListener, TcpStream}, task::JoinHandle};
 use crate::{error::{InterpreterError, InterpreterResult}, parser::Expr};
 
 use super::{enviroment::Environment, native::NativeFunction, Interpreter};
@@ -23,9 +23,14 @@ pub enum Value {
 }
 
 pub enum PromiseState {
-    Pending(Pin<Box<dyn Future<Output = InterpreterResult<Value>> + Send>>),
-    Resolved(Value),
+    Pending(JoinHandle<Result<Value, InterpreterError>>),
+    Fulfilled(Value),
     Rejected(InterpreterError),
+}
+impl Value {
+    pub fn create_promise(future: JoinHandle<Result<Value, InterpreterError>>) -> Value {
+        Value::Promise(Arc::new(Mutex::new(PromiseState::Pending(future))))
+    }
 }
 
 impl Debug for Value {

@@ -1,8 +1,11 @@
 use enviroment::Environment;
+use tokio::task::JoinHandle;
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use value::{PromiseState, Value};
+use value::Value;
 
 use crate::error::{InterpreterError, InterpreterResult};
 use crate::parser::{Expr, TryCatch};
@@ -28,9 +31,18 @@ impl Interpreter {
         }
     }
 
-    pub fn new_with_base_path(base_path: PathBuf) -> Self {
+    pub fn new_with_environment(env: Arc<Mutex<Environment>>) -> Self {
         Interpreter {
-            environment: Arc::new(Mutex::new(Environment::new(base_path))),
+            environment: env,
+            line: 0,
+        }
+    }
+
+    pub fn new_with_base_path(base_path: PathBuf) -> Self {
+        let env = Arc::new(Mutex::new(Environment::new(base_path)));
+        env.lock().unwrap().register_native_functions();
+        Interpreter {
+            environment: env,
             line: 0,
         }
     }
@@ -333,20 +345,20 @@ impl Interpreter {
                     let owner = self.evaluate(owner)?;
                     if let Value::Instance(_, env) = owner.clone() {
                         let previous = self.environment.clone();
-                        self.environment = env;
+                        //self.environment = env;
                         let callee = self.evaluate(callee)?;
-                        let result = self.execute_async_call(Some(owner), callee, evaluated_args);
-                        self.environment = previous;
-                        return result;
+                        let join_handle = self.execute_async_call(Some(owner), callee, evaluated_args);
+                        return Ok(Value::create_promise(join_handle));
                     }
                     Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::InvalidCall(0),
                     ))
                 } else {
                     let callee = self.evaluate(callee)?;
-                    self.execute_async_call(None, callee, evaluated_args)
+                    let join_handle = self.execute_async_call(None, callee, evaluated_args);
+                    return Ok(Value::create_promise(join_handle));
                 }
-            },
+            }
             Expr::Grouping(expr) => self.evaluate(expr),
             Expr::Nil => Ok(Value::Nil),
             Expr::If(condition, then_branch, else_branch) => {
@@ -505,7 +517,35 @@ impl Interpreter {
         arguments: Vec<Value>,
     ) -> InterpreterResult<Value> {
         match callee {
-            Value::Function(name, params, body) => {
+            Value::Function(name, params, body ) => {
+                if arguments.len() != params.len() {
+                    return Err(InterpreterError::runtime_error(
+                        crate::error::RuntimeErrorKind::ExpextedArgument(
+                            self.line,
+                            arguments.len(),
+                            params.len(),
+                        ),
+                    ));
+                }
+                let environment =
+                    Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
+                let mut env_lock = environment.lock().unwrap();
+                for (param, arg) in params.iter().zip(arguments) {
+                    env_lock.define(param, arg);
+                }
+                drop(env_lock);
+                match *body {
+                    Expr::Block(statements) => {
+                        let result = self.execute_block(&statements, environment)?;
+                        Ok(result)
+                    }
+                    _ => {
+                        let result = self.evaluate(&body)?;
+                        Ok(result)
+                    }
+                }
+            }
+            Value::AsyncFunction(name, params, body ) => {
                 if arguments.len() != params.len() {
                     return Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::ExpextedArgument(
@@ -568,45 +608,49 @@ impl Interpreter {
             )),
         }
     }
-    
-    async fn execute_async_call(
+
+    fn execute_async_call(
         &mut self,
         _owner: Option<Value>,
         callee: Value,
-        arguments: Vec<Value>,) -> InterpreterResult<Value>{
-            match callee{
-                Value::AsyncFunction(name, params,body) => {
+        arguments: Vec<Value>,
+    ) -> JoinHandle<Result<Value, InterpreterError>>  {
+        let environment = Arc::clone(&self.environment);
+        let line = self.line.clone();
+        tokio::spawn(async move {
+            match callee {
+                Value::AsyncFunction(_name, params, body) => {
                     if arguments.len() != params.len() {
                         return Err(InterpreterError::runtime_error(
                             crate::error::RuntimeErrorKind::ExpextedArgument(
-                                self.line,
-                                arguments.len(),
+                                line,
+                                arguments.len(), 
                                 params.len(),
                             ),
                         ));
                     }
-                    let environment =
-                        Environment::new_with_enclosing(Some(Arc::clone(&self.environment)));
                     let mut env_lock = environment.lock().unwrap();
                     for (param, arg) in params.iter().zip(arguments) {
                         env_lock.define(param, arg);
                     }
                     drop(env_lock);
+                    let mut interpreter = Interpreter::new_with_environment(Arc::clone(&environment));
                     match *body {
                         Expr::Block(statements) => {
-                            let result = self.execute_block(&statements, environment)?;
+                            let result = interpreter.execute_block(&statements, environment)?;
                             Ok(result)
                         }
                         _ => {
-                            let result = self.evaluate(&body)?;
+                            let result = interpreter.evaluate(&body)?;
                             Ok(result)
                         }
                     }
                 }
                 _ => Err(InterpreterError::runtime_error(
-                    crate::error::RuntimeErrorKind::UndefinedFunction(self.line),
+                    crate::error::RuntimeErrorKind::UndefinedFunction(line),
                 )),
             }
+        })
     }
     fn execute_try_catch(&mut self, try_catch: &TryCatch) -> InterpreterResult<Value> {
         // Create new environment for catch block scope

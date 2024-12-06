@@ -1,6 +1,9 @@
-fun fact(n){
-    if (n == 0) return 1;
-    return n * fact(n - 1)
+async fun test(){
+    await delay(50000);
+    print("test async");
 }
 
-print(fact(18));
+await test();
+for (var i = 0; i < 100; i=i+1){
+    print(i);
+}
