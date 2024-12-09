@@ -28,7 +28,7 @@ pub enum Expr {
     AsyncFunction(Token, Vec<Token>, Box<Expr>), // Function declaration
     Class(Token, Vec<Expr>),                // Class declaration
     Call(Option<Box<Expr>>, Box<Expr>, Vec<Expr>),      // Function call (owner, func, args)
-    AsyncCall(Option<Box<Expr>>, Box<Expr>, Vec<Expr>), // Async function call (owner, func, args
+    Await(Box<Expr>), // Async function call (owner, func, args
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     While(Box<Expr>, Box<Expr>),
     For(Box<Expr>, Box<Expr>, Box<Expr>, Box<Expr>),
@@ -334,7 +334,7 @@ impl Parser {
             }
         }
         if self.match_tokens(vec![TokenType::Await]){
-            match self.async_call() {
+            match self.await_statement() {
                 Ok(expr) => return Ok(expr),
                 Err(e) => return Err(e),
             }
@@ -578,32 +578,9 @@ impl Parser {
         }
     }
 
-    fn async_call(&mut self) -> InterpreterResult<Expr> {
-        let mut expr: Expr = Expr::Variable(self.advance());
-        // Now handle the arguments if there are parentheses
-        if self.match_tokens(vec![TokenType::Dot]){
-            let fun_name = self.consume(TokenType::IDENTIfIER)?;
-            let fun = Expr::Variable(fun_name);
-            while self.match_tokens(vec![TokenType::LeftParen]) {
-                let arguments = self.arguments()?;
-                self.consume(TokenType::RightParen)?;
-                expr = Expr::AsyncCall(Some(Box::new(expr)),Box::new(fun), arguments);
-                println!("class call: {:?}", expr);
-                return Ok(expr);
-            }
-        }
-        while self.match_tokens(vec![TokenType::LeftParen]) {
-            let arguments = self.arguments()?;
-            self.consume(TokenType::RightParen)?;
-            expr = Expr::AsyncCall(None,Box::new(expr), arguments);
-        }
-        if matches!(expr, Expr::AsyncCall(..)) {
-            Ok(expr)
-        } else {
-            Err(InterpreterError::parser_error(
-                crate::error::ParserErrorKind::ExpectExpression(self.previous().lexeme, self.peek().line),
-            ))
-        }
+    fn await_statement(&mut self) -> InterpreterResult<Expr> {
+        let expr = self.primary()?;
+        Ok(Expr::Await(Box::new(expr)))
     }
     fn async_function_declaration(&mut self) -> InterpreterResult<Expr> {
         self.consume(TokenType::Fun)?;

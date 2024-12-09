@@ -9,7 +9,7 @@ rust-version = "1.80"
 rand = "*"
 rustc-hash = "2.1.0"
 string-interner = "0.18.0"
-tokio = { version = "1.41.1", features = ["full"] }
+tokio = { version = "1.41.1", features = ["full", "rt", "rt-multi-thread"] }
 
 [profile.dev]
 debug = true

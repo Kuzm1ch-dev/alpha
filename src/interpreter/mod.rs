@@ -1,11 +1,11 @@
 use enviroment::Environment;
-use tokio::task::JoinHandle;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use value::Value;
+use tokio::task::JoinHandle;
+use value::{PromiseState, Value};
 
 use crate::error::{InterpreterError, InterpreterResult};
 use crate::parser::{Expr, TryCatch};
@@ -65,7 +65,7 @@ impl Interpreter {
         Ok(last_value)
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> InterpreterResult<Value> {
+    pub async fn evaluate(&mut self, expr: &Expr) -> InterpreterResult<Value> {
         match expr {
             Expr::Literal(token, value) => match token.token_type {
                 TokenType::Number => Ok(Value::Number(value.parse().unwrap())),
@@ -333,32 +333,67 @@ impl Interpreter {
                     ))
                 } else {
                     let callee = self.evaluate(callee)?;
-                    self.execute_call(None, callee, evaluated_args)
-                }
-            }
-            Expr::AsyncCall(owner, callee, arguments) => {
-                let mut evaluated_args = Vec::new();
-                for arg in arguments {
-                    evaluated_args.push(self.evaluate(arg)?);
-                }
-                if let Some(owner) = owner {
-                    let owner = self.evaluate(owner)?;
-                    if let Value::Instance(_, env) = owner.clone() {
-                        let previous = self.environment.clone();
-                        //self.environment = env;
-                        let callee = self.evaluate(callee)?;
-                        let join_handle = self.execute_async_call(Some(owner), callee, evaluated_args);
-                        return Ok(Value::create_promise(join_handle));
+                    match callee {
+                        Value::Function(_, _, _) => {
+                            let result = self.execute_call(None, callee, evaluated_args);
+                            return result;
+                        }
+                        Value::AsyncFunction(_, _, _) => {
+                            let join_handle = self.execute_async_call(None, callee, evaluated_args);
+                            return Ok(Value::create_promise(join_handle));
+                        }
+                        _ => Err(InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::InvalidCall(0),
+                        )),
                     }
-                    Err(InterpreterError::runtime_error(
-                        crate::error::RuntimeErrorKind::InvalidCall(0),
-                    ))
-                } else {
-                    let callee = self.evaluate(callee)?;
-                    let join_handle = self.execute_async_call(None, callee, evaluated_args);
-                    return Ok(Value::create_promise(join_handle));
+                    // self.execute_call(None, callee, evaluated_args)
                 }
             }
+            Expr::Await(expr) => {
+                let expr = self.evaluate(expr)?;
+                if let Value::Promise(join_handle) = expr {
+                    let mut promise = join_handle.lock().unwrap();
+                    match &mut *promise {
+                        PromiseState::Pending(join_handle) => {
+                            let result = tokio::runtime::Handle::current()
+                                .block_on(async { join_handle.await })
+                                .unwrap()?;
+                            return Ok(result);
+                        }
+                        PromiseState::Fulfilled(value) => return Ok(value.clone()),
+                        PromiseState::Rejected(_error) => {
+                            return Err(InterpreterError::runtime_error(
+                                crate::error::RuntimeErrorKind::PromiseRejected(self.line),
+                            ))
+                        }
+                    }
+                }
+                Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidCall(0),
+                ))
+            }
+            //     let mut evaluated_args = Vec::new();
+            //     for arg in arguments {
+            //         evaluated_args.push(self.evaluate(arg)?);
+            //     }
+            //     if let Some(owner) = owner {
+            //         let owner = self.evaluate(owner)?;
+            //         if let Value::Instance(_, env) = owner.clone() {
+            //             let previous = self.environment.clone();
+            //             //self.environment = env;
+            //             let callee = self.evaluate(callee)?;
+            //             let join_handle = self.execute_async_call(Some(owner), callee, evaluated_args);
+            //             return Ok(Value::create_promise(join_handle));
+            //         }
+            //         Err(InterpreterError::runtime_error(
+            //             crate::error::RuntimeErrorKind::InvalidCall(0),
+            //         ))
+            //     } else {
+            //         let callee = self.evaluate(callee)?;
+            //         let join_handle = self.execute_async_call(None, callee, evaluated_args);
+            //         return Ok(Value::create_promise(join_handle));
+            //     }
+            // }
             Expr::Grouping(expr) => self.evaluate(expr),
             Expr::Nil => Ok(Value::Nil),
             Expr::If(condition, then_branch, else_branch) => {
@@ -517,7 +552,7 @@ impl Interpreter {
         arguments: Vec<Value>,
     ) -> InterpreterResult<Value> {
         match callee {
-            Value::Function(name, params, body ) => {
+            Value::Function(name, params, body) => {
                 if arguments.len() != params.len() {
                     return Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::ExpextedArgument(
@@ -545,7 +580,7 @@ impl Interpreter {
                     }
                 }
             }
-            Value::AsyncFunction(name, params, body ) => {
+            Value::AsyncFunction(name, params, body) => {
                 if arguments.len() != params.len() {
                     return Err(InterpreterError::runtime_error(
                         crate::error::RuntimeErrorKind::ExpextedArgument(
@@ -614,7 +649,7 @@ impl Interpreter {
         _owner: Option<Value>,
         callee: Value,
         arguments: Vec<Value>,
-    ) -> JoinHandle<Result<Value, InterpreterError>>  {
+    ) -> JoinHandle<Result<Value, InterpreterError>> {
         let environment = Arc::clone(&self.environment);
         let line = self.line.clone();
         tokio::spawn(async move {
@@ -624,7 +659,7 @@ impl Interpreter {
                         return Err(InterpreterError::runtime_error(
                             crate::error::RuntimeErrorKind::ExpextedArgument(
                                 line,
-                                arguments.len(), 
+                                arguments.len(),
                                 params.len(),
                             ),
                         ));
@@ -634,7 +669,8 @@ impl Interpreter {
                         env_lock.define(param, arg);
                     }
                     drop(env_lock);
-                    let mut interpreter = Interpreter::new_with_environment(Arc::clone(&environment));
+                    let mut interpreter =
+                        Interpreter::new_with_environment(Arc::clone(&environment));
                     match *body {
                         Expr::Block(statements) => {
                             let result = interpreter.execute_block(&statements, environment)?;

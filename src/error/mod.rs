@@ -91,6 +91,8 @@ impl fmt::Display for ParserErrorKind {
 }
 #[derive(Debug, Clone)]
 pub enum RuntimeErrorKind {
+    PromiseRejected(usize),
+    InvalidAwait(usize),
     InvalidTailCall(usize),
     InvalidNumber(usize),
     InvalidLiteral(usize),
@@ -125,6 +127,12 @@ pub enum RuntimeErrorKind {
 impl fmt::Display for RuntimeErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RuntimeErrorKind::PromiseRejected(line) => {
+                write!(f, "[line {}] Error: Promise rejected.", line)
+            }
+            RuntimeErrorKind::InvalidAwait(line) => {
+                write!(f, "[line {}] Error: Can only use 'await' inside async functions.", line)
+            }
             RuntimeErrorKind::InvalidNumber(line) => {
                 write!(f, "[line {}] Error: Invalid number.", line)
             }
