@@ -65,7 +65,7 @@ impl Interpreter {
         Ok(last_value)
     }
 
-    pub async fn evaluate(&mut self, expr: &Expr) -> InterpreterResult<Value> {
+    pub fn evaluate(&mut self, expr: &Expr) -> InterpreterResult<Value> {
         match expr {
             Expr::Literal(token, value) => match token.token_type {
                 TokenType::Number => Ok(Value::Number(value.parse().unwrap())),
