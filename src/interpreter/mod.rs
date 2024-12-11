@@ -339,8 +339,12 @@ impl Interpreter {
                             return result;
                         }
                         Value::AsyncFunction(_, _, _) => {
-                            let join_handle = self.execute_async_call(None, callee, evaluated_args);
-                            return Ok(Value::create_promise(join_handle));
+                            let future = self.execute_async_call(None, callee, evaluated_args);
+                            return Ok(Value::create_promise(Box::pin(future)));
+                        }
+                        Value::NativeFunction(_) => {
+                            let result = self.execute_call(None, callee, evaluated_args);
+                            return result;
                         }
                         _ => Err(InterpreterError::runtime_error(
                             crate::error::RuntimeErrorKind::InvalidCall(0),
@@ -355,10 +359,11 @@ impl Interpreter {
                     let mut promise = join_handle.lock().unwrap();
                     match &mut *promise {
                         PromiseState::Pending(join_handle) => {
-                            let result = tokio::runtime::Handle::current()
-                                .block_on(async { join_handle.await })
-                                .unwrap()?;
-                            return Ok(result);
+                            let result = tokio::task::block_in_place(|| {
+                                let rt = tokio::runtime::Runtime::new().unwrap();
+                                rt.block_on(join_handle)                                                        
+                            });
+                            return result;
                         }
                         PromiseState::Fulfilled(value) => return Ok(value.clone()),
                         PromiseState::Rejected(_error) => {
@@ -649,10 +654,10 @@ impl Interpreter {
         _owner: Option<Value>,
         callee: Value,
         arguments: Vec<Value>,
-    ) -> JoinHandle<Result<Value, InterpreterError>> {
+    ) -> impl Future<Output = Result<Value, InterpreterError>> {
         let environment = Arc::clone(&self.environment);
         let line = self.line.clone();
-        tokio::spawn(async move {
+        async move {
             match callee {
                 Value::AsyncFunction(_name, params, body) => {
                     if arguments.len() != params.len() {
@@ -686,7 +691,7 @@ impl Interpreter {
                     crate::error::RuntimeErrorKind::UndefinedFunction(line),
                 )),
             }
-        })
+        }
     }
     fn execute_try_catch(&mut self, try_catch: &TryCatch) -> InterpreterResult<Value> {
         // Create new environment for catch block scope

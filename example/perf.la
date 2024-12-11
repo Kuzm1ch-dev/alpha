@@ -1,13 +1,8 @@
-async fun test(){
-    await delay(2);
+async fun main(){
+    await delay(1);
     print("aa");
 }
 
-async fun main(){
-    await test();
-    for (var i = 0; i < 100; i=i+1){
-        print(i);
-    }
-}
-
-main();
+await main();
+await delay(1);
+print("bb");

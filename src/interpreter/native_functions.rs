@@ -239,11 +239,11 @@ impl Environment {
                     crate::error::RuntimeErrorKind::InvalidArgumentType(0),
                 )),
             };
-            let future = tokio::spawn(async move {
+            let future = async move {
                 sleep(duration).await;
                 Ok(Value::Nil)
-            });
-            Ok(Value::create_promise(future))
+            };
+            Ok(Value::create_promise(Box::pin(future)))
         });
     }
 }

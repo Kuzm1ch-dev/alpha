@@ -22,44 +22,46 @@ pub enum Value {
     Nil,
 }
 
+
+
 pub enum PromiseState {
-    Pending(JoinHandle<Result<Value, InterpreterError>>),
+    Pending(Pin<Box<dyn Future<Output = Result<Value, InterpreterError>>>>),
     Fulfilled(Value),
     Rejected(InterpreterError),
 }
 
-impl PromiseState {
-    pub fn get_value(&self) -> InterpreterResult<Value> {
-        match self {
-            PromiseState::Pending(_) => Ok(Value::Nil),
-            PromiseState::Fulfilled(v) => Ok(v.clone()),
-            PromiseState::Rejected(e) => Err(e.clone()),
-        }
-    }
+// impl PromiseState {
+//     pub fn get_value(&self) -> InterpreterResult<Value> {
+//         match self {
+//             PromiseState::Pending(_) => Ok(Value::Nil),
+//             PromiseState::Fulfilled(v) => Ok(v.clone()),
+//             PromiseState::Rejected(e) => Err(e.clone()),
+//         }
+//     }
 
-    pub fn await_value(&mut self) -> Pin<Box<dyn Future<Output = InterpreterResult<Value>> + '_>> {
-        match self {
-            PromiseState::Pending(f) => {
-                Box::pin(async move {
-                    match f.await {
-                        Ok(r) => match r {
-                            Ok(v) => Ok(v),
-                            Err(e) => Err(e),
-                        },
-                        Err(_) => Err(InterpreterError::runtime_error(
-                            crate::error::RuntimeErrorKind::InvalidAwait(0),
-                        ))
-                    }
-                })
-            },
-            PromiseState::Fulfilled(v) => Box::pin(async move { Ok(v.clone()) }),
-            PromiseState::Rejected(e) => Box::pin(async move { Err(e.clone()) }),
-        }
-    }
-}
+//     pub fn await_value(&mut self) -> Pin<Box<dyn Future<Output = InterpreterResult<Value>> + '_>> {
+//         match self {
+//             PromiseState::Pending(f) => {
+//                 Box::pin(async move {
+//                     match f.await {
+//                         Ok(r) => match r {
+//                             Ok(v) => Ok(v),
+//                             Err(e) => Err(e),
+//                         },
+//                         Err(_) => Err(InterpreterError::runtime_error(
+//                             crate::error::RuntimeErrorKind::InvalidAwait(0),
+//                         ))
+//                     }
+//                 })
+//             },
+//             PromiseState::Fulfilled(v) => Box::pin(async move { Ok(v.clone()) }),
+//             PromiseState::Rejected(e) => Box::pin(async move { Err(e.clone()) }),
+//         }
+//     }
+// }
 
 impl Value {
-    pub fn create_promise(future: JoinHandle<Result<Value, InterpreterError>>) -> Value {
+    pub fn create_promise(future: Pin<Box<dyn Future<Output = Result<Value, InterpreterError>>>>) -> Value {
         Value::Promise(Arc::new(Mutex::new(PromiseState::Pending(future))))
     }
 }
