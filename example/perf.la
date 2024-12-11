@@ -3,6 +3,6 @@ async fun main(){
     print("aa");
 }
 
-await main();
+main();
 await delay(1);
 print("bb");
