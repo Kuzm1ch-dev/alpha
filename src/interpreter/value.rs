@@ -1,5 +1,5 @@
 use std::{collections::HashMap, fmt::{self, Debug}, future::Future, pin::Pin, sync::{Arc, Mutex}};
-use tokio::{net::{TcpListener, TcpStream}, task::JoinHandle};
+use tokio::{net::{TcpListener, TcpSocket, TcpStream}, task::JoinHandle};
 use crate::{error::{InterpreterError, InterpreterResult}, parser::Expr};
 
 use super::{enviroment::Environment, native::NativeFunction, Interpreter};
@@ -18,6 +18,7 @@ pub enum Value {
     Array(Vec<Value>),
     Dictionary(HashMap<String, Value>),
     Socket(Arc<Mutex<TcpStream>>),
+    TlsSocket(Arc<Mutex<tokio_rustls::client::TlsStream<TcpStream>>>),
     Server(Arc<Mutex<TcpListener>>),
     Nil,
 }
@@ -29,36 +30,6 @@ pub enum PromiseState {
     Fulfilled(Value),
     Rejected(InterpreterError),
 }
-
-// impl PromiseState {
-//     pub fn get_value(&self) -> InterpreterResult<Value> {
-//         match self {
-//             PromiseState::Pending(_) => Ok(Value::Nil),
-//             PromiseState::Fulfilled(v) => Ok(v.clone()),
-//             PromiseState::Rejected(e) => Err(e.clone()),
-//         }
-//     }
-
-//     pub fn await_value(&mut self) -> Pin<Box<dyn Future<Output = InterpreterResult<Value>> + '_>> {
-//         match self {
-//             PromiseState::Pending(f) => {
-//                 Box::pin(async move {
-//                     match f.await {
-//                         Ok(r) => match r {
-//                             Ok(v) => Ok(v),
-//                             Err(e) => Err(e),
-//                         },
-//                         Err(_) => Err(InterpreterError::runtime_error(
-//                             crate::error::RuntimeErrorKind::InvalidAwait(0),
-//                         ))
-//                     }
-//                 })
-//             },
-//             PromiseState::Fulfilled(v) => Box::pin(async move { Ok(v.clone()) }),
-//             PromiseState::Rejected(e) => Box::pin(async move { Err(e.clone()) }),
-//         }
-//     }
-// }
 
 impl Value {
     pub fn create_promise(future: Pin<Box<dyn Future<Output = Result<Value, InterpreterError>>>>) -> Value {
@@ -99,6 +70,7 @@ impl Debug for Value {
                 write!(f, "}}")
             },
             Value::Socket(_) => write!(f, "<socket>"),
+            Value::TlsSocket(_) => write!(f, "<tls socket>"),
             Value::Server(_) => write!(f, "<server>"),
             Value::Promise(_) => write!(f, "<promise>"),
         }
@@ -169,6 +141,7 @@ impl Value {
                 s
             }
             Value::Socket(_) => "socket".to_string(),
+            Value::TlsSocket(_) => "tls socket".to_string(),
             Value::Server(_) => "server".to_string(),
             Value::AsyncFunction(name, _,_) => name.clone(),
             Value::Promise(_) => "promise".to_string(),
@@ -189,6 +162,7 @@ impl Value {
             Value::Array(_) => "array".to_string(),
             Value::Dictionary(_) => "dictionary".to_string(),
             Value::Socket(_) => "socket".to_string(),
+            Value::TlsSocket(_) => "tls socket".to_string(),
             Value::Server(_) => "server".to_string(),
             Value::Promise(_) => "promise".to_string(),
         }
@@ -229,6 +203,7 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Socket(_) => write!(f, "socket"),
+            Value::TlsSocket(_) => write!(f, "tls socket"),
             Value::Server(_) => write!(f, "server"),
             Value::Promise(_) => write!(f, "promise"),
         }

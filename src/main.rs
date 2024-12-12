@@ -9,6 +9,7 @@ pub mod parser;
 use parser::Parser;
 pub mod error;
 pub mod interpreter;
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
@@ -45,6 +46,7 @@ async fn main() {
                         std::process::exit(70);
                     }
                 }
+                interpreter.runtime.shutdown_background();
             }
             Err(error) => {
                 eprintln!("{}", error);

@@ -1,6 +1,8 @@
-use std::{io::Write, sync::{Arc, Mutex}, time::Duration};
+use std::{fmt::format, io::Write, sync::{Arc, Mutex}, time::Duration};
 
-use tokio::{io::AsyncReadExt, net::TcpStream, stream, time::sleep};
+use rustls::{pki_types::ServerName, ClientConfig};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{TcpListener, TcpSocket, TcpStream}, stream, time::sleep};
+use tokio_rustls::TlsConnector;
 
 use crate::error::{InterpreterError, InterpreterResult, RuntimeErrorKind};
 use super::{enviroment::Environment, native::NativeFunction, value::Value};
@@ -11,6 +13,7 @@ impl Environment {
         self.register_io_functions();
         self.register_conversion_functions();
         self.register_async_functions();
+        self.register_network_functions();
     }
 
     fn register_system_functions(&mut self) {
@@ -190,6 +193,7 @@ impl Environment {
                     result
                 }
                 Value::Socket(_) => "socket".to_string(),
+                Value::TlsSocket(_) => "tls socket".to_string(),
                 Value::Server(_) => "server".to_string(),
                 Value::AsyncFunction(name, _, _) => format!("<async fn {}>", name),
                 Value::Promise(_) => "promise".to_string(),
@@ -244,6 +248,179 @@ impl Environment {
                 Ok(Value::Nil)
             };
             Ok(Value::create_promise(Box::pin(future)))
+        });
+    }
+    fn register_network_functions(&mut self){
+        self.define_native("listen", 1, |args| {
+            let port = match args[0] {
+                Value::Number(n) => n as u8,
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let future = async move {
+                let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await.unwrap();
+                Ok(Value::Server(Arc::new(Mutex::new(listener))))
+            };
+            Ok(Value::create_promise(Box::pin(future)))
+        });
+        self.define_native("connect", 2, |args| {
+            let address = match &args[0] {
+                Value::String(address) => address.clone(),
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let port = match args[1] {
+                Value::Number(n) => n as u8,
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let future = async move {
+                let stream = TcpStream::connect(format!("{}:{}", address, port)).await;
+                match stream {
+                    Ok(stream) => Ok(Value::Socket(Arc::new(Mutex::new(stream)))),
+                    Err(e) => Err(InterpreterError::runtime_error(
+                        crate::error::RuntimeErrorKind::IoError(e.to_string()),
+                    ))
+                }
+            };
+            Ok(Value::create_promise(Box::pin(future)))
+        });
+        self.define_native("connectTLS", 2, |args| {
+            let address = match &args[0] {
+                Value::String(address) => address.clone(),
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let port = match args[1] {
+                Value::Number(n) => n as u16,
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(1),
+                )),
+            };
+    
+            let future = async move {
+                // Create TLS configuration
+                let mut config = ClientConfig::builder()
+                    .with_root_certificates(rustls::RootCertStore {
+                        roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+                    })
+                    .with_no_client_auth();
+    
+                let connector = TlsConnector::from(Arc::new(config));
+                
+                // Connect to TCP first
+                let stream = TcpStream::connect(format!("{}:{}", address, port)).await.unwrap();
+                // Upgrade to TLS
+                let domain = ServerName::try_from(address)
+                    .map_err(|_| std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Invalid domain name"
+                    )).unwrap();
+    
+                let tls_stream = connector.connect(domain, stream).await.unwrap();
+                
+                Ok(Value::TlsSocket(Arc::new(Mutex::new(tls_stream))))
+            };
+    
+            Ok(Value::create_promise(Box::pin(future)))
+        });
+    
+        self.define_native("accept", 1, |args| {
+            let server = match &args[0] {
+                Value::Server(server) => server.clone(),
+                _ => return Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            };
+            let future = async move {
+                let (socket, _) = server.lock().unwrap().accept().await.unwrap();
+                Ok(Value::Socket(Arc::new(Mutex::new(socket))))
+            };
+            Ok(Value::create_promise(Box::pin(future)))
+        });
+        self.define_native("write", 2, |args| {
+            match &args[0] {
+                Value::Socket(socket) => {
+                    let socket = socket.clone();
+                    let message = match &args[1] {
+                        Value::String(message) => {
+                            // Convert escape sequences to actual bytes
+                            message.replace("\\r\\n", "\r\n")
+                                   .replace("\\n", "\n")
+                                   .replace("\\r", "\r")
+                        },
+                        _ => return Err(InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::InvalidArgumentType(1),
+                        )),
+                    };
+    
+                    let future = async move {
+                        let mut socket = socket.lock().unwrap();
+                        socket.write_all(message.as_bytes()).await.unwrap();
+                        Ok(Value::Nil)
+                    };
+                    Ok(Value::create_promise(Box::pin(future)))
+                },
+                Value::TlsSocket(socket) => {
+                    let socket = socket.clone();
+                    let message = match &args[1] {
+                        Value::String(message) => {
+                            // Convert escape sequences to actual bytes
+                            message.replace("\\r\\n", "\r\n")
+                                   .replace("\\n", "\n")
+                                   .replace("\\r", "\r")
+                        },
+                        _ => return Err(InterpreterError::runtime_error(
+                            crate::error::RuntimeErrorKind::InvalidArgumentType(1),
+                        )),
+                    };
+    
+                    let future = async move {
+                        let mut socket = socket.lock().unwrap();
+                        let bytes = message.as_bytes();
+                        println!("Writing {:?} bytes", bytes);
+                        socket.write_all(message.as_bytes()).await.unwrap();
+                        Ok(Value::Nil)
+                    };
+                    Ok(Value::create_promise(Box::pin(future)))
+                },
+                _ => Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            }
+        });
+        self.define_native("read", 1, |args| {
+            match &args[0] {
+                Value::Socket(socket) => {
+                    let socket = socket.clone();
+                    let future = async move {
+                        let mut buffer = [0; 1024];
+                        let mut socket = socket.lock().unwrap();
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        let message = String::from_utf8_lossy(&buffer[..n]).to_string();
+                        Ok(Value::String(message))
+                    };
+                    Ok(Value::create_promise(Box::pin(future)))
+                },
+                Value::TlsSocket(socket) => {
+                    let socket = socket.clone();
+                    let future = async move {
+                        let mut buffer = [0; 1024];
+                        let mut socket = socket.lock().unwrap();
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        let message = String::from_utf8_lossy(&buffer[..n]).to_string();
+                        Ok(Value::String(message))
+                    };
+                    Ok(Value::create_promise(Box::pin(future)))
+                },
+                _ => Err(InterpreterError::runtime_error(
+                    crate::error::RuntimeErrorKind::InvalidArgumentType(0),
+                )),
+            }
         });
     }
 }

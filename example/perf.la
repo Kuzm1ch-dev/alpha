@@ -1,8 +1,0 @@
-async fun main(){
-    await delay(1);
-    print("aa");
-}
-
-main();
-await delay(1);
-print("bb");

@@ -10,6 +10,9 @@ rand = "*"
 rustc-hash = "2.1.0"
 string-interner = "0.18.0"
 tokio = { version = "1.41.1", features = ["full", "rt", "rt-multi-thread"] }
+tokio-rustls = "0.26.1"
+rustls = "0.23.20"
+webpki-roots = "0.26.7"
 
 [profile.dev]
 debug = true

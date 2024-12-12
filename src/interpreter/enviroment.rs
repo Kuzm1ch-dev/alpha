@@ -7,7 +7,7 @@ use crate::{
     parser::Parser, tokenizer::Tokenizer,
 };
 
-use super::{native::NativeFunction, value::Value, Interpreter};
+use super::{native::NativeFunction, value::{self, Value}, Interpreter};
 
 #[derive(Clone, Debug)]
 pub struct Module {
@@ -89,7 +89,9 @@ impl Environment {
         }else if let Some(enclosing) = &self.enclosing {
             let enclosing_lock = enclosing.lock().unwrap();
             enclosing_lock.get(name)
-        } else {
+        }else if let Some(value) = &self.get_from_module(name) {
+            Some(value.clone())
+        }  else {
             None
         }
     }
@@ -165,14 +167,14 @@ impl Environment {
         // Create interpreter for module
         let mut interpreter = Interpreter::new();
         interpreter.interpret(expresions)?;
-        let module_env = interpreter.environment;
+        let module_env = interpreter.environment.clone();
         // Store module
         let module = Module {
             name: module_name.to_string(),
             environment: module_env,
             path: path.to_str().unwrap().to_string(),
         };
-
+        interpreter.runtime.shutdown_background();
         self.modules.insert(module_name.to_string(), module);
         Ok(())
     }

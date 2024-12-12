@@ -18,6 +18,7 @@ pub mod value;
 pub struct Interpreter {
     environment: Arc<Mutex<Environment>>,
     line: usize,
+    pub runtime: tokio::runtime::Runtime
 }
 
 impl Interpreter {
@@ -25,25 +26,38 @@ impl Interpreter {
         let path = PathBuf::new();
         let env = Arc::new(Mutex::new(Environment::new(path)));
         env.lock().unwrap().register_native_functions();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
         Interpreter {
             environment: env,
             line: 0,
+            runtime
         }
     }
 
     pub fn new_with_environment(env: Arc<Mutex<Environment>>) -> Self {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build().unwrap();
         Interpreter {
             environment: env,
             line: 0,
+            runtime
         }
     }
 
     pub fn new_with_base_path(base_path: PathBuf) -> Self {
         let env = Arc::new(Mutex::new(Environment::new(base_path)));
         env.lock().unwrap().register_native_functions();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build().unwrap();
         Interpreter {
             environment: env,
             line: 0,
+            runtime
         }
     }
 
@@ -360,8 +374,7 @@ impl Interpreter {
                     match &mut *promise {
                         PromiseState::Pending(join_handle) => {
                             let result = tokio::task::block_in_place(|| {
-                                let rt = tokio::runtime::Runtime::new().unwrap();
-                                rt.block_on(join_handle)                                                        
+                                self.runtime.block_on(join_handle)                                                        
                             });
                             return result;
                         }
@@ -676,7 +689,7 @@ impl Interpreter {
                     drop(env_lock);
                     let mut interpreter =
                         Interpreter::new_with_environment(Arc::clone(&environment));
-                    match *body {
+                    let result = match *body {
                         Expr::Block(statements) => {
                             let result = interpreter.execute_block(&statements, environment)?;
                             Ok(result)
@@ -685,7 +698,9 @@ impl Interpreter {
                             let result = interpreter.evaluate(&body)?;
                             Ok(result)
                         }
-                    }
+                    };
+                    interpreter.runtime.shutdown_background();
+                    return result;
                 }
                 _ => Err(InterpreterError::runtime_error(
                     crate::error::RuntimeErrorKind::UndefinedFunction(line),

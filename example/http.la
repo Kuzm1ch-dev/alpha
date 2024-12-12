@@ -1,0 +1,21 @@
+async fun httpsGet(host, path) {
+    var socket = await connectTLS(host, 443);
+    // Craft HTTP request
+    var request = "GET " + path + " HTTP/1.1\r\n" +
+                 "Host: " + host + "\r\n" +
+                 "User-Agent: Mozilla/5.0\r\n" +
+                 "Accept: */*\r\n" +
+                 "Connection: close\r\n" +
+                 "\r\n";
+    print("request: "+request);
+    // Send request
+    await write(socket, request);
+    // Read response
+    var chunk = await read(socket);
+    var response = chunk;
+    while(chunk != "") {
+        chunk = await read(socket);
+        response = response + chunk;
+    }
+    return response;
+}
